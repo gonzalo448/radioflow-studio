@@ -6,6 +6,13 @@ export interface ApiHealth {
   uptimeSeconds: number;
 }
 
+/** Listo para recibir tráfico (p. ej. orquestadores / balanceadores). Incluye comprobación de BD. */
+export interface ApiReadiness {
+  ready: boolean;
+  database: "ok" | "down";
+  version: string;
+}
+
 export interface MediaAssetStub {
   id: string;
   title: string;

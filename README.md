@@ -10,17 +10,25 @@ Plataforma integral de automatización y gestión radial: programación, librer�
 
 ## Arranque rápido
 
-1. **Infra local**
+1. **Infra local (Postgres, Redis y API en contenedor)**
 
    ```bash
    docker compose up -d
    ```
 
+   Levanta PostgreSQL, Redis y la **API** en el puerto **4000** (con `prisma migrate deploy` al arrancar). Los archivos subidos se guardan en el volumen `radioflow_media` montado en `/app/media` dentro del contenedor.
+
+   Perfil opcional **workers** (parrilla automática, requiere `RADIOFLOW_TOKEN`):
+
+   ```bash
+   docker compose --profile workers up -d
+   ```
+
 2. **Variables de entorno**
 
-   Copia `.env.example` a `apps/api/.env` y ajusta si hace falta (mínimo `JWT_SECRET` y `DATABASE_URL`).
+   Copia `.env.example` a `apps/api/.env` para desarrollo **local** (API con `npm run dev`). Con solo Docker, define al menos `JWT_SECRET` en el entorno o en un `.env` en la raíz para el servicio `api` (ver `docker-compose.yml`).
 
-3. **Dependencias y base de datos**
+3. **Dependencias y base de datos (desarrollo sin contenedor API)**
 
    ```bash
    npm install
@@ -52,11 +60,12 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 | `apps/web` | Frontend React + Vite + PWA (instalable en móvil/tablet/escritorio) |
 | `apps/schedule-worker` | Automatización de parrilla: bloque activo → `queue-from-playlist` |
 | `packages/shared` | Tipos y contratos compartidos |
-| `docker-compose.yml` | PostgreSQL 16 y Redis 7 |
+| `docker-compose.yml` | PostgreSQL 16, Redis 7, **API** (imagen Docker) y perfil opcional `workers` |
 
 ## API útil (v0.1)
 
-- `GET /api/health` — estado del servicio
+- `GET /api/health` — estado del proceso (rápido, sin consultar BD)
+- `GET /api/health/ready` — listo para tráfico; **503** si la base de datos no responde (orquestación / balanceadores)
 - `POST /api/auth/register` — registro (`email`, `password`, `displayName` opcional)
 - `POST /api/auth/login` — inicio de sesión
 - `GET /api/users/me` — perfil (header `Authorization: Bearer <token>`)

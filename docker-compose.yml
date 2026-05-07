@@ -24,6 +24,44 @@ services:
     volumes:
       - radioflow_redis:/data
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://radioflow:radioflow_dev@postgres:5432/radioflow
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-cambiar-minimo-32-caracteres-radioflow}
+      CORS_ORIGIN: http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173
+      MEDIA_ROOT: /app/media
+    volumes:
+      - radioflow_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/apps/api && npx prisma migrate deploy && node dist/index.js",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
   # Ollama para curaduría semántica local (Fase 6). Descomenta cuando lo necesites.
   # ollama:
   #   image: ollama/ollama:latest
@@ -40,12 +78,17 @@ services:
     volumes:
       - .:/app
     environment:
-      RADIOFLOW_API_URL: http://host.docker.internal:4000
+      # Con el servicio `api` en este mismo compose, usa http://api:4000
+      RADIOFLOW_API_URL: ${RADIOFLOW_API_URL:-http://api:4000}
       RADIOFLOW_TOKEN: ${RADIOFLOW_TOKEN:-}
       SCHEDULE_POLL_MS: "20000"
     command: ["sh", "-c", "npm install && npm run start -w @radioflow/schedule-worker"]
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   radioflow_pg:
   radioflow_redis:
+  radioflow_media:

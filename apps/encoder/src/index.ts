@@ -21,6 +21,7 @@ type StationMsg = { type?: string; payload?: { nowPlaying: NowPlaying } };
 let lastAbs: string | null = null;
 let ffmpegChild: import("node:child_process").ChildProcess | null = null;
 let wsConnected = false;
+let wsReconnectAttempt = 0;
 
 function log(msg: string, extra?: unknown) {
   const t = new Date().toISOString();
@@ -125,10 +126,21 @@ function connectWs() {
   const headers: Record<string, string> = {};
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
 
+  const baseMs = 3000;
+  const maxMs = 60_000;
+
+  const scheduleReconnect = () => {
+    const delay = Math.min(baseMs * 2 ** Math.min(wsReconnectAttempt, 10), maxMs);
+    wsReconnectAttempt += 1;
+    log(`WebSocket cerrado; reintento ${wsReconnectAttempt} en ${delay}ms…`);
+    setTimeout(connectWs, delay);
+  };
+
   const ws = new WebSocket(url, { headers });
 
   ws.on("open", () => {
     wsConnected = true;
+    wsReconnectAttempt = 0;
     log("WebSocket conectado", url);
   });
 
@@ -146,8 +158,7 @@ function connectWs() {
 
   ws.on("close", () => {
     wsConnected = false;
-    log("WebSocket cerrado; reintentando en 3s…");
-    setTimeout(connectWs, 3000);
+    scheduleReconnect();
   });
 
   ws.on("error", (err) => {
