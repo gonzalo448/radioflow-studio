@@ -9,3 +9,6 @@ coverage
 .turbo
 .vscode/*
 !.vscode/extensions.json
+
+**/data/media/*
+!apps/api/data/media/.gitkeep

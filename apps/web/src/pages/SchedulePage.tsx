@@ -12,6 +12,20 @@ type Block = {
   playlist: { id: string; name: string } | null;
 };
 
+type TodayHints = {
+  dayOfWeek: number;
+  minuteNow: number;
+  blocks: Block[];
+  active: Block[];
+};
+
+type StationBrief = {
+  station: {
+    autoScheduleEnabled: boolean;
+    lastAppliedScheduleBlockId: string | null;
+  };
+};
+
 const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 function toClock(total: number) {
@@ -25,6 +39,8 @@ export function SchedulePage() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [playlists, setPlaylists] = useState<{ id: string; name: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [hints, setHints] = useState<TodayHints | null>(null);
+  const [stationBrief, setStationBrief] = useState<StationBrief["station"] | null>(null);
 
   const [label, setLabel] = useState("Bloque matutino");
   const [dayOfWeek, setDayOfWeek] = useState(1);
@@ -43,9 +59,29 @@ export function SchedulePage() {
     setBlocks(data);
   }, []);
 
+  const loadHintsAndStation = useCallback(async () => {
+    try {
+      const [h, st] = await Promise.all([
+        apiFetch<TodayHints>("/api/schedule/today-hints"),
+        apiFetch<StationBrief>("/api/station"),
+      ]);
+      setHints(h);
+      setStationBrief(st.station);
+    } catch {
+      setHints(null);
+      setStationBrief(null);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadHintsAndStation();
+    const t = window.setInterval(() => void loadHintsAndStation(), 45_000);
+    return () => window.clearInterval(t);
+  }, [loadHintsAndStation]);
 
   useEffect(() => {
     fetch("/api/playlists")
@@ -77,6 +113,7 @@ export function SchedulePage() {
       });
       setMsg(null);
       await load();
+      await loadHintsAndStation();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -87,6 +124,7 @@ export function SchedulePage() {
     try {
       await apiFetch(`/api/schedule/${id}`, { method: "DELETE", token });
       await load();
+      await loadHintsAndStation();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -98,6 +136,43 @@ export function SchedulePage() {
       <p className="muted">
         Bloques recurrentes por día (0 = domingo … 6 = sábado). En producción se conectarán con el motor de automatización y reglas inteligentes.
       </p>
+      {hints && (
+        <div className="tile" style={{ marginBottom: "1rem" }}>
+          <strong>Hoy ({DAYS[hints.dayOfWeek]})</strong> · ahora local:{" "}
+          <code className="mono">{toClock(hints.minuteNow)}</code>
+          {hints.active.length > 0 ? (
+            <span>
+              {" "}
+              · <strong>Bloques activos:</strong>{" "}
+              {hints.active.map((b, i) => (
+                <span key={b.id}>
+                  {i > 0 ? " · " : ""}
+                  {b.label}
+                  {b.playlist ? ` (${b.playlist.name})` : ""}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="muted"> · ningún bloque cubre este minuto</span>
+          )}
+          {stationBrief && (
+            <div className="muted" style={{ marginTop: "0.35rem" }}>
+              Automatización parrilla:{" "}
+              <code className="mono">{stationBrief.autoScheduleEnabled ? "activada" : "desactivada"}</code>
+              {stationBrief.lastAppliedScheduleBlockId ? (
+                <>
+                  {" "}
+                  · último bloque aplicado a la cola:{" "}
+                  <code className="mono">
+                    {hints.blocks.find((b) => b.id === stationBrief.lastAppliedScheduleBlockId)?.label ??
+                      stationBrief.lastAppliedScheduleBlockId.slice(0, 8) + "…"}
+                  </code>
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
       {user && (
         <p className="badge">
           Rol: <code>{user.role}</code> · edición requiere editor o admin

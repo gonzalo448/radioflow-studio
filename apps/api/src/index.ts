@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import { loadEnv } from "./config.js";
 import { healthRoutes } from "./routes/health.js";
@@ -11,6 +12,9 @@ import { scheduleRoutes } from "./routes/schedule.js";
 import { playlistRoutes } from "./routes/playlists.js";
 import { streamingRoutes } from "./routes/streaming.js";
 import { wsStationRoutes } from "./routes/ws-station.js";
+import { settingsRoutes } from "./routes/settings.js";
+import { semanticRoutes } from "./routes/semantic.js";
+import { reportsRoutes } from "./routes/reports.js";
 
 const env = loadEnv();
 
@@ -21,14 +25,21 @@ await app.register(cors, {
   credentials: true,
 });
 
+await app.register(multipart, {
+  limits: { fileSize: 280 * 1024 * 1024 },
+});
 await app.register(websocket);
+
 await app.register(healthRoutes, { prefix: "/api" });
 await app.register(authRoutes, { prefix: "/api", env });
 await app.register(usersRoutes, { prefix: "/api", env });
-await app.register(libraryRoutes, { prefix: "/api" });
+await app.register(settingsRoutes, { prefix: "/api", env });
+await app.register(semanticRoutes, { prefix: "/api", env });
+await app.register(reportsRoutes, { prefix: "/api", env });
+await app.register(libraryRoutes, { prefix: "/api", env });
 await app.register(stationRoutes, { prefix: "/api", env });
 await app.register(scheduleRoutes, { prefix: "/api", env });
-await app.register(playlistRoutes, { prefix: "/api" });
+await app.register(playlistRoutes, { prefix: "/api", env });
 await app.register(streamingRoutes, { prefix: "/api", env });
 await app.register(wsStationRoutes, { prefix: "/api" });
 

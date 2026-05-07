@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { Env } from "../config.js";
 import { prisma } from "../db.js";
 import { optionalAuth, requireRoles, ROLES_SCHEDULE_WRITE } from "../lib/auth.js";
+import { broadcastStationState } from "../realtime/station-hub.js";
+import { MAIN_STATION_ID } from "../services/station-state.js";
 
 const blockBody = z.object({
   label: z.string().min(1),
@@ -75,6 +77,11 @@ export const scheduleRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         data: body,
         include: { playlist: { select: { id: true, name: true } } },
       });
+      const cleared = await prisma.station.updateMany({
+        where: { id: MAIN_STATION_ID, lastAppliedScheduleBlockId: id },
+        data: { lastAppliedScheduleBlockId: null },
+      });
+      if (cleared.count > 0) void broadcastStationState();
       return block;
     } catch {
       return reply.status(404).send({ error: "Bloque no encontrado" });
@@ -86,6 +93,11 @@ export const scheduleRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
     const { id } = request.params as { id: string };
     try {
       await prisma.scheduleBlock.delete({ where: { id } });
+      const cleared = await prisma.station.updateMany({
+        where: { id: MAIN_STATION_ID, lastAppliedScheduleBlockId: id },
+        data: { lastAppliedScheduleBlockId: null },
+      });
+      if (cleared.count > 0) void broadcastStationState();
       return reply.status(204).send();
     } catch {
       return reply.status(404).send({ error: "Bloque no encontrado" });

@@ -3,9 +3,16 @@ import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 
 type Asset = { id: string; title: string; artist: string | null; path: string };
+type Pl = { id: string; name: string };
 type QueueRow = { id: string; position: number; asset: Asset };
 type StationState = {
-  station: { id: string; mode: string; currentPosition: number; liveTitle: string | null };
+  station: {
+    id: string;
+    mode: string;
+    currentPosition: number;
+    liveTitle: string | null;
+    autoScheduleEnabled?: boolean;
+  };
   queue: QueueRow[];
   nowPlaying: (Asset & { queueItemId?: string }) | null;
 };
@@ -19,6 +26,9 @@ export function StationPage() {
   const { token, user } = useAuth();
   const [state, setState] = useState<StationState | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [playlists, setPlaylists] = useState<Pl[]>([]);
+  const [plPick, setPlPick] = useState("");
+  const [replaceQueue, setReplaceQueue] = useState(false);
   const [pick, setPick] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<"off" | "connecting" | "live" | "error">("off");
@@ -39,6 +49,13 @@ export function StationPage() {
       .then((r) => r.json())
       .then(setAssets)
       .catch(() => setAssets([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/playlists")
+      .then((r) => r.json())
+      .then(setPlaylists)
+      .catch(() => setPlaylists([]));
   }, []);
 
   useEffect(() => {
@@ -129,6 +146,40 @@ export function StationPage() {
     }
   }
 
+  async function syncFromPlaylist() {
+    if (!token) {
+      setMsg("Inicia sesión");
+      return;
+    }
+    if (!plPick) return;
+    try {
+      const next = await apiFetch<StationState>("/api/station/queue-from-playlist", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ playlistId: plPick, replace: replaceQueue }),
+      });
+      setState(next);
+      setMsg(null);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function setAutomation(enabled: boolean) {
+    if (!token) return;
+    try {
+      await apiFetch("/api/station", {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ autoScheduleEnabled: enabled }),
+      });
+      setMsg(null);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Error");
+    }
+  }
+
   if (!state) return <p>Cargando estación…</p>;
 
   return (
@@ -154,6 +205,19 @@ export function StationPage() {
         </p>
       )}
       {msg && <p className="error">{msg}</p>}
+      <label className="check tile-inline">
+        <input
+          type="checkbox"
+          checked={Boolean(state.station.autoScheduleEnabled)}
+          onChange={(e) => void setAutomation(e.target.checked)}
+          disabled={!token}
+        />
+        <span>
+          <strong>Automatizar parrilla</strong> — el proceso{" "}
+          <code>@radioflow/schedule-worker</code> vuelca la playlist del bloque horario activo en la cola (requiere token
+          en el worker).
+        </span>
+      </label>
       <div className="grid">
         <article className="tile">
           <h3>En emisión (referencia)</h3>
@@ -164,6 +228,12 @@ export function StationPage() {
                 {state.nowPlaying.artist && <span className="muted"> — {state.nowPlaying.artist}</span>}
               </p>
               <p className="muted mono">{state.nowPlaying.path}</p>
+              <audio
+                className="preview-audio"
+                controls
+                src={`/api/library/assets/${state.nowPlaying.id}/stream`}
+                preload="metadata"
+              />
               <p className="muted small">Modo: {state.station.mode}</p>
             </div>
           ) : (
@@ -189,6 +259,31 @@ export function StationPage() {
             </select>
             <button type="button" className="btn primary" onClick={() => void append()}>
               Encolar
+            </button>
+          </div>
+        </article>
+        <article className="tile">
+          <h3>Playlist → cola</h3>
+          <p className="muted small">Vuelca una lista completa (orden de la playlist).</p>
+          <div className="row stack">
+            <select value={plPick} onChange={(e) => setPlPick(e.target.value)} className="select">
+              <option value="">Elegir playlist…</option>
+              {playlists.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={replaceQueue}
+                onChange={(e) => setReplaceQueue(e.target.checked)}
+              />
+              Reemplazar cola actual
+            </label>
+            <button type="button" className="btn" onClick={() => void syncFromPlaylist()}>
+              Aplicar
             </button>
           </div>
         </article>

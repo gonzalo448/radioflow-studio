@@ -1,20 +1,16 @@
 {
-  "name": "@radioflow/encoder",
+  "name": "@radioflow/schedule-worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "WS/polling + FFmpeg opcional hacia Icecast",
-  "dependencies": {
-    "ws": "^8.18.0"
-  },
+  "description": "Aplica bloques de parrilla activos a la cola al aire vía API",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.13",
     "@types/node": "^22.10.7",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "~5.7.3"
   }
 }

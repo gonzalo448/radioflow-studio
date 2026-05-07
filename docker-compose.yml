@@ -32,6 +32,20 @@ services:
   #   volumes:
   #     - ollama_data:/root/.ollama
 
+  # Perfil opcional: worker de parrilla — la API debe estar en el host (p. ej. :4000).
+  schedule-worker:
+    profiles: ["workers"]
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      RADIOFLOW_API_URL: http://host.docker.internal:4000
+      RADIOFLOW_TOKEN: ${RADIOFLOW_TOKEN:-}
+      SCHEDULE_POLL_MS: "20000"
+    command: ["sh", "-c", "npm install && npm run start -w @radioflow/schedule-worker"]
+    restart: unless-stopped
+
 volumes:
   radioflow_pg:
   radioflow_redis:

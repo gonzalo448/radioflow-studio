@@ -53,3 +53,5 @@ export function requireRoles(
 export const ROLES_STATION_WRITE: Role[] = ["admin", "editor", "dj"];
 export const ROLES_SCHEDULE_WRITE: Role[] = ["admin", "editor"];
 export const ROLES_STREAMING_WRITE: Role[] = ["admin", "editor"];
+export const ROLES_LIBRARY_WRITE: Role[] = ["admin", "editor", "dj"];
+export const ROLES_REPORTS_READ: Role[] = ["admin", "editor"];

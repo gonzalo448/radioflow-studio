@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import type { ApiHealth } from "@radioflow/shared";
 
@@ -16,9 +17,18 @@ export function Dashboard() {
     <section className="card">
       <h1>Panel de control</h1>
       <p className="muted">
-        Base del ecosistema RadioFlow: API Node.js, PostgreSQL, React PWA y módulos listos para streaming
-        (Icecast/Shoutcast/AzuraCast) e IA (Ollama/Perplexica).
+        API Node.js, PostgreSQL, cola al aire con WebSocket, subida de medios, playlists, parrilla, streaming Icecast,
+        informes de operación y enriquecimiento vía Ollama opcional.
       </p>
+      <div className="quick-links">
+        <Link to="/station">Estación</Link>
+        <Link to="/library">Librería</Link>
+        <Link to="/playlists">Playlists</Link>
+        <Link to="/schedule">Parrilla</Link>
+        <Link to="/streaming">Streaming</Link>
+        <Link to="/reports">Informes</Link>
+        <Link to="/settings">Marca</Link>
+      </div>
       <div className="grid">
         <article className="tile">
           <h3>Estado API</h3>

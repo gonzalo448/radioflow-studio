@@ -26,6 +26,15 @@ enum StationMode {
   LIVE
 }
 
+enum PlayAction {
+  QUEUE_APPEND
+  QUEUE_REMOVE
+  SKIP
+  STATION_UPDATE
+  PLAYLIST_QUEUE_SYNC
+  LIBRARY_UPLOAD
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -33,6 +42,16 @@ model User {
   displayName  String?
   role         Role     @default(viewer)
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  playLogs     PlayLog[]
+}
+
+model AppSettings {
+  id           String   @id @default("global")
+  stationName  String   @default("RadioFlow Studio")
+  tagline      String?
+  primaryColor String?  @default("#38bdf8")
+  logoUrl      String?
   updatedAt    DateTime @updatedAt
 }
 
@@ -45,10 +64,12 @@ model MediaAsset {
   durationSec    Int?
   mimeType       String?
   embeddingRef   String?
+  semanticNote   String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   playlistItems  PlaylistItem[]
   playQueueItems PlayQueueItem[]
+  playLogs       PlayLog[]
 }
 
 model Playlist {
@@ -72,12 +93,14 @@ model PlaylistItem {
 }
 
 model Station {
-  id              String           @id
-  mode            StationMode      @default(AUTO)
-  currentPosition Int              @default(0)
-  liveTitle       String?
-  updatedAt       DateTime         @updatedAt
-  queue           PlayQueueItem[]
+  id                           String           @id
+  mode                         StationMode      @default(AUTO)
+  currentPosition              Int              @default(0)
+  liveTitle                    String?
+  autoScheduleEnabled          Boolean          @default(false)
+  lastAppliedScheduleBlockId   String?
+  updatedAt                    DateTime         @updatedAt
+  queue                        PlayQueueItem[]
 }
 
 model PlayQueueItem {
@@ -119,4 +142,16 @@ model StreamingTarget {
   enabled        Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+}
+
+model PlayLog {
+  id        String     @id @default(cuid())
+  stationId String     @default("main")
+  action    PlayAction
+  assetId   String?
+  asset     MediaAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  details   Json?
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
 }

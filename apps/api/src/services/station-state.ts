@@ -5,7 +5,7 @@ export const MAIN_STATION_ID = "main";
 export async function ensureMainStation() {
   await prisma.station.upsert({
     where: { id: MAIN_STATION_ID },
-    create: { id: MAIN_STATION_ID, mode: "AUTO", currentPosition: 0 },
+    create: { id: MAIN_STATION_ID, mode: "AUTO", currentPosition: 0, autoScheduleEnabled: false },
     update: {},
   });
 }

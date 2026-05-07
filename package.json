@@ -10,13 +10,16 @@
   "scripts": {
     "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @radioflow/api\" \"npm run dev -w @radioflow/web\"",
     "dev:encoder": "npm run dev -w @radioflow/encoder",
+    "dev:schedule": "npm run dev -w @radioflow/schedule-worker",
+    "dev:auto": "concurrently -n api,web,enc,sched -c blue,magenta,green,yellow \"npm run dev -w @radioflow/api\" \"npm run dev -w @radioflow/web\" \"npm run dev -w @radioflow/encoder\" \"npm run dev -w @radioflow/schedule-worker\"",
     "dev:full": "concurrently -n api,web,enc -c blue,magenta,green \"npm run dev -w @radioflow/api\" \"npm run dev -w @radioflow/web\" \"npm run dev -w @radioflow/encoder\"",
     "build": "npm run build -w @radioflow/shared && npm run build -w @radioflow/api && npm run build -w @radioflow/web",
     "db:generate": "npm run db:generate -w @radioflow/api",
     "db:migrate": "npm run db:migrate -w @radioflow/api",
     "db:studio": "npm run db:studio -w @radioflow/api",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:workers": "docker compose --profile workers up -d schedule-worker"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

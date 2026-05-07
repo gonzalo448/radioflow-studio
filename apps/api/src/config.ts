@@ -11,6 +11,8 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((s) => (s && s.length > 0 ? s : undefined)),
+  OLLAMA_MODEL: z.string().default("llama3.2"),
+  MEDIA_ROOT: z.string().default("data/media"),
 });
 
 export type Env = z.infer<typeof envSchema>;

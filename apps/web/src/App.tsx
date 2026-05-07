@@ -1,14 +1,36 @@
+import { useEffect } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { Dashboard } from "./pages/Dashboard";
 import { LibraryPage } from "./pages/LibraryPage";
 import { LoginPage } from "./pages/LoginPage";
+import { PlaylistDetailPage } from "./pages/PlaylistDetailPage";
+import { PlaylistsPage } from "./pages/PlaylistsPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { SchedulePage } from "./pages/SchedulePage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { StationPage } from "./pages/StationPage";
 import { StreamingPage } from "./pages/StreamingPage";
 
+function useBranding() {
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((s: { stationName?: string; primaryColor?: string | null; tagline?: string | null }) => {
+        if (s.primaryColor) {
+          document.documentElement.style.setProperty("--accent", s.primaryColor);
+        }
+        if (s.stationName) {
+          document.title = s.stationName;
+        }
+      })
+      .catch(() => {});
+  }, []);
+}
+
 export default function App() {
   const { user, logout } = useAuth();
+  useBranding();
 
   return (
     <div className="app">
@@ -24,8 +46,11 @@ export default function App() {
           <Link to="/">Panel</Link>
           <Link to="/station">Estación</Link>
           <Link to="/schedule">Parrilla</Link>
+          <Link to="/playlists">Playlists</Link>
           <Link to="/library">Librería</Link>
           <Link to="/streaming">Streaming</Link>
+          <Link to="/reports">Informes</Link>
+          <Link to="/settings">Marca</Link>
           {user ? (
             <button type="button" className="btn linkish" onClick={() => logout()}>
               Salir
@@ -41,8 +66,12 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/station" element={<StationPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/playlists" element={<PlaylistsPage />} />
+          <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/streaming" element={<StreamingPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Env } from "../config.js";
 import { prisma } from "../db.js";
 import { optionalAuth, requireRoles, ROLES_STATION_WRITE } from "../lib/auth.js";
+import { writePlayLog } from "../lib/play-log.js";
 import { broadcastStationState } from "../realtime/station-hub.js";
 import { ensureMainStation, getStationState, MAIN_STATION_ID } from "../services/station-state.js";
 
@@ -10,10 +11,18 @@ const patchStation = z.object({
   mode: z.enum(["AUTO", "LIVE_ASSIST", "LIVE"]).optional(),
   currentPosition: z.number().int().min(0).optional(),
   liveTitle: z.string().nullable().optional(),
+  autoScheduleEnabled: z.boolean().optional(),
 });
 
 const appendBody = z.object({
   assetId: z.string().min(1),
+});
+
+const fromPlaylistBody = z.object({
+  playlistId: z.string().min(1),
+  replace: z.boolean().default(false),
+  /** Si viene del schedule-worker, persiste para no re-aplicar al reiniciar el proceso. */
+  scheduleBlockId: z.string().optional(),
 });
 
 export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
@@ -37,8 +46,59 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
       data: { stationId: MAIN_STATION_ID, assetId: body.assetId, position },
       include: { asset: true },
     });
+    void writePlayLog({
+      action: "QUEUE_APPEND",
+      userId: request.userId ?? null,
+      assetId: body.assetId,
+    });
     void broadcastStationState();
     return reply.status(201).send(item);
+  });
+
+  app.post("/station/queue-from-playlist", async (request, reply) => {
+    if (!requireRoles(request, reply, ROLES_STATION_WRITE)) return;
+    await ensureMainStation();
+    const body = fromPlaylistBody.parse(request.body);
+    const pl = await prisma.playlist.findUnique({
+      where: { id: body.playlistId },
+      include: { items: { orderBy: { position: "asc" } } },
+    });
+    if (!pl) return reply.status(404).send({ error: "Playlist no encontrada" });
+    if (pl.items.length === 0) return reply.status(400).send({ error: "Playlist vacía" });
+
+    await prisma.$transaction(async (tx) => {
+      if (body.replace) {
+        await tx.playQueueItem.deleteMany({ where: { stationId: MAIN_STATION_ID } });
+        await tx.station.update({ where: { id: MAIN_STATION_ID }, data: { currentPosition: 0 } });
+      }
+      let pos = await tx.playQueueItem.count({ where: { stationId: MAIN_STATION_ID } });
+      if (body.replace) pos = 0;
+      for (const it of pl.items) {
+        await tx.playQueueItem.create({
+          data: { stationId: MAIN_STATION_ID, assetId: it.assetId, position: pos },
+        });
+        pos += 1;
+      }
+      await tx.station.update({
+        where: { id: MAIN_STATION_ID },
+        data: {
+          lastAppliedScheduleBlockId: body.scheduleBlockId ?? null,
+        },
+      });
+    });
+
+    void writePlayLog({
+      action: "PLAYLIST_QUEUE_SYNC",
+      userId: request.userId ?? null,
+      details: {
+        playlistId: body.playlistId,
+        replace: body.replace,
+        count: pl.items.length,
+        scheduleBlockId: body.scheduleBlockId ?? null,
+      },
+    });
+    void broadcastStationState();
+    return getStationState();
   });
 
   app.delete("/station/queue/:itemId", async (request, reply) => {
@@ -69,6 +129,12 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
       if (pos >= queueAfter.length) pos = Math.max(0, queueAfter.length - 1);
       await tx.station.update({ where: { id: MAIN_STATION_ID }, data: { currentPosition: pos } });
     });
+    void writePlayLog({
+      action: "QUEUE_REMOVE",
+      userId: request.userId ?? null,
+      assetId: existing.assetId,
+      details: { queueItemId: itemId },
+    });
     void broadcastStationState();
     return reply.status(204).send();
   });
@@ -83,7 +149,14 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
         ...(body.mode && { mode: body.mode }),
         ...(body.currentPosition !== undefined && { currentPosition: body.currentPosition }),
         ...(body.liveTitle !== undefined && { liveTitle: body.liveTitle }),
+        ...(body.autoScheduleEnabled !== undefined && { autoScheduleEnabled: body.autoScheduleEnabled }),
+        ...(body.autoScheduleEnabled === false && { lastAppliedScheduleBlockId: null }),
       },
+    });
+    void writePlayLog({
+      action: "STATION_UPDATE",
+      userId: request.userId ?? null,
+      details: body as Record<string, unknown>,
     });
     void broadcastStationState();
     return station;
@@ -94,10 +167,22 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
     await ensureMainStation();
     const count = await prisma.playQueueItem.count({ where: { stationId: MAIN_STATION_ID } });
     const station = await prisma.station.findUniqueOrThrow({ where: { id: MAIN_STATION_ID } });
-    const next = Math.min(station.currentPosition + 1, Math.max(0, count - 1));
+    const current = station.currentPosition;
+    const next = Math.min(current + 1, Math.max(0, count - 1));
+    const queue = await prisma.playQueueItem.findMany({
+      where: { stationId: MAIN_STATION_ID },
+      orderBy: { position: "asc" },
+    });
+    const nowItem = queue[current];
     const updated = await prisma.station.update({
       where: { id: MAIN_STATION_ID },
       data: { currentPosition: next },
+    });
+    void writePlayLog({
+      action: "SKIP",
+      userId: request.userId ?? null,
+      assetId: nowItem?.assetId,
+      details: { fromIndex: current, toIndex: next },
     });
     void broadcastStationState();
     return updated;
