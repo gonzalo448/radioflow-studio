@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import { optionalAuth, requireRoles, ROLES_STATION_WRITE } from "../lib/auth.js";
 import { writePlayLog } from "../lib/play-log.js";
 import { broadcastStationState } from "../realtime/station-hub.js";
+import { SyncPlaylistError, syncQueueFromPlaylist } from "../services/queue-from-playlist.js";
 import { ensureMainStation, getStationState, MAIN_STATION_ID } from "../services/station-state.js";
 
 const patchStation = z.object({
@@ -57,48 +58,21 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
 
   app.post("/station/queue-from-playlist", async (request, reply) => {
     if (!requireRoles(request, reply, ROLES_STATION_WRITE)) return;
-    await ensureMainStation();
     const body = fromPlaylistBody.parse(request.body);
-    const pl = await prisma.playlist.findUnique({
-      where: { id: body.playlistId },
-      include: { items: { orderBy: { position: "asc" } } },
-    });
-    if (!pl) return reply.status(404).send({ error: "Playlist no encontrada" });
-    if (pl.items.length === 0) return reply.status(400).send({ error: "Playlist vacía" });
-
-    await prisma.$transaction(async (tx) => {
-      if (body.replace) {
-        await tx.playQueueItem.deleteMany({ where: { stationId: MAIN_STATION_ID } });
-        await tx.station.update({ where: { id: MAIN_STATION_ID }, data: { currentPosition: 0 } });
-      }
-      let pos = await tx.playQueueItem.count({ where: { stationId: MAIN_STATION_ID } });
-      if (body.replace) pos = 0;
-      for (const it of pl.items) {
-        await tx.playQueueItem.create({
-          data: { stationId: MAIN_STATION_ID, assetId: it.assetId, position: pos },
-        });
-        pos += 1;
-      }
-      await tx.station.update({
-        where: { id: MAIN_STATION_ID },
-        data: {
-          lastAppliedScheduleBlockId: body.scheduleBlockId ?? null,
-        },
-      });
-    });
-
-    void writePlayLog({
-      action: "PLAYLIST_QUEUE_SYNC",
-      userId: request.userId ?? null,
-      details: {
+    try {
+      return await syncQueueFromPlaylist({
         playlistId: body.playlistId,
         replace: body.replace,
-        count: pl.items.length,
-        scheduleBlockId: body.scheduleBlockId ?? null,
-      },
-    });
-    void broadcastStationState();
-    return getStationState();
+        scheduleBlockId: body.scheduleBlockId,
+        userId: request.userId ?? null,
+      });
+    } catch (e) {
+      if (e instanceof SyncPlaylistError) {
+        if (e.code === "NOT_FOUND") return reply.status(404).send({ error: e.message });
+        if (e.code === "EMPTY") return reply.status(400).send({ error: e.message });
+      }
+      throw e;
+    }
   });
 
   app.delete("/station/queue/:itemId", async (request, reply) => {

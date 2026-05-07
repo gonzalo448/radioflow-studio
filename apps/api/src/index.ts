@@ -15,6 +15,7 @@ import { wsStationRoutes } from "./routes/ws-station.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { semanticRoutes } from "./routes/semantic.js";
 import { reportsRoutes } from "./routes/reports.js";
+import { runInternalScheduleTick } from "./services/internal-scheduler.js";
 
 const env = loadEnv();
 
@@ -51,6 +52,19 @@ app.get("/", async () => ({
 const start = async () => {
   try {
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    const poll = env.INTERNAL_SCHEDULE_POLL_MS;
+    if (poll > 0) {
+      const replace = env.SCHEDULE_REPLACE_QUEUE;
+      app.log.warn(
+        { pollMs: poll, replaceQueue: replace },
+        "Scheduler interno de parrilla activo: evita correr @radioflow/schedule-worker en paralelo (mismos ticks / más carga).",
+      );
+      const tick = () => {
+        void runInternalScheduleTick(replace).catch((err) => app.log.error({ err }, "internal-scheduler"));
+      };
+      tick();
+      setInterval(tick, poll);
+    }
   } catch (err) {
     app.log.error(err);
     process.exit(1);

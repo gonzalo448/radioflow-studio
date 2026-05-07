@@ -108,11 +108,13 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 - `GET|POST /api/streaming/targets`, `PATCH|DELETE …` — destinos Icecast/Shoutcast/AzuraCast (**lectura y detalle requieren sesión**)
 - `GET /api/streaming/encoder-url` — URL lista para FFmpeg (**dj+**), según destino activo en `PATCH /api/settings` (`activeStreamingTargetId`)
 
-### Automatización de parrilla (`@radioflow/schedule-worker`)
+### Automatización de parrilla (`@radioflow/schedule-worker` **o** scheduler interno)
 
 1. Activa **Automatizar parrilla** en la UI (Estación) o `PATCH /api/station` con `autoScheduleEnabled: true`.
 2. Crea bloques en **Parrilla** con playlist asociada.
-3. Ejecuta el worker con `RADIOFLOW_TOKEN` (usuario **dj+**) y opcional `SCHEDULE_REPLACE_QUEUE` (por defecto sustituye la cola al cambiar de bloque). Ver `apps/schedule-worker/.env.example`.
+3. **Elige un modo** (no mezcles worker + scheduler interno sin necesidad):
+   - **Worker externo**: `RADIOFLOW_TOKEN` (usuario **dj+**) y `SCHEDULE_REPLACE_QUEUE` (por defecto sustituye la cola). Ver `apps/schedule-worker/.env.example`.
+   - **Dentro de la API**: define `INTERNAL_SCHEDULE_POLL_MS` (p. ej. `20000`) y opcional `SCHEDULE_REPLACE_QUEUE=0` para hacer *append*. No requiere token: corre en el mismo proceso que Fastify. Útil en Docker con un solo contenedor de API.
 
 ### Encoder con WebSocket
 
@@ -126,7 +128,7 @@ Variables típicas del encoder: ver `apps/encoder/.env.example` (`RADIOFLOW_ICEC
 
 | Tema | Qué implica | Cómo se aborda en producto |
 |------|----------------|-----------------------------|
-| **Parrilla en proceso separado** | El worker evita acoplar timers en la API y facilita escalar procesos. | **Opción A**: plugin Fastify + `setInterval` / cron *solo en un pod* (riesgo si hay réplicas). **Opción B**: colas con **Redis** (BullMQ) + worker. **Opción C**: mantener el worker como servicio (estado actual). |
+| **Parrilla en proceso separado** | El worker evita acoplar timers en la API. | **Opción A (actual)**: `@radioflow/schedule-worker`. **Opción B**: `INTERNAL_SCHEDULE_POLL_MS>0` en la API (misma deduplicación en BD; **no** mezclar con el worker salvo conocimiento del doble poll). **Opción C**: Redis + colas cuando escales réplicas. |
 | **Redis sin uso** | El servicio en Compose está reservado. | **Usar** Redis para pub/sub multi-instancia del WebSocket, rate limits, locks de parrilla o colas; **o** quitar el servicio hasta que haga falta. |
 | **Encoder + destino** | Antes solo variable de entorno. | **Resuelto en esta versión**: destino activo en **Marca** + `GET /api/streaming/encoder-url` + encoder sin `RADIOFLOW_ICECAST_URL` si hay token. |
 | **Multi-tenant / RBAC fino / Liquidsoap / embeddings / apps nativas** | Alcance de plataforma grande. | Fases: modelo `Organization` + `tenantId`, políticas por recurso, motor Liquidsoap o SaaS Icecast, pgvector u otro índice, Capacitor/React Native. |
