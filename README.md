@@ -91,7 +91,7 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 - `GET|POST /api/library/assets` — catálogo; `?q=` filtro por título/artista/album
 - `GET /api/library/assets/:id/stream` — stream del archivo bajo `MEDIA_ROOT` (seguridad por prefijo)
 - `POST /api/library/upload` — subida multipart (campo `file`; roles `dj`+)
-- `GET /api/settings` — marca pública · `PATCH /api/settings` (editor+)
+- `GET /api/settings` — marca pública · `PATCH /api/settings` (editor+, incluye `activeStreamingTargetId` para salida del encoder vía API)
 - `GET /api/semantic/search?q=` — búsqueda incl. nota semántica · `POST /api/semantic/enrich/:assetId` (Ollama)
 - `GET /api/reports/play-log` — bitácora de operaciones (editor+)
 - `POST /api/station/queue-from-playlist` — volcar playlist a la cola (`replace` opcional)
@@ -106,6 +106,7 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 - `GET /api/schedule/today-hints` — bloques del día y cuáles cubren el minuto actual
 - `GET|POST /api/playlists` — listados / crear playlist vacía
 - `GET|POST /api/streaming/targets`, `PATCH|DELETE …` — destinos Icecast/Shoutcast/AzuraCast (**lectura y detalle requieren sesión**)
+- `GET /api/streaming/encoder-url` — URL lista para FFmpeg (**dj+**), según destino activo en `PATCH /api/settings` (`activeStreamingTargetId`)
 
 ### Automatización de parrilla (`@radioflow/schedule-worker`)
 
@@ -120,6 +121,15 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 **Salida hacia Icecast**: guía paso a paso en [docs/streaming-encoder-icecast.md](docs/streaming-encoder-icecast.md). Icecast de prueba en Docker: `npm run docker:broadcast` (perfil `broadcast`).
 
 Variables típicas del encoder: ver `apps/encoder/.env.example` (`RADIOFLOW_ICECAST_URL`, `ENABLE_FFMPEG`).
+
+## Limitaciones habituales del MVP y cómo avanzar
+
+| Tema | Qué implica | Cómo se aborda en producto |
+|------|----------------|-----------------------------|
+| **Parrilla en proceso separado** | El worker evita acoplar timers en la API y facilita escalar procesos. | **Opción A**: plugin Fastify + `setInterval` / cron *solo en un pod* (riesgo si hay réplicas). **Opción B**: colas con **Redis** (BullMQ) + worker. **Opción C**: mantener el worker como servicio (estado actual). |
+| **Redis sin uso** | El servicio en Compose está reservado. | **Usar** Redis para pub/sub multi-instancia del WebSocket, rate limits, locks de parrilla o colas; **o** quitar el servicio hasta que haga falta. |
+| **Encoder + destino** | Antes solo variable de entorno. | **Resuelto en esta versión**: destino activo en **Marca** + `GET /api/streaming/encoder-url` + encoder sin `RADIOFLOW_ICECAST_URL` si hay token. |
+| **Multi-tenant / RBAC fino / Liquidsoap / embeddings / apps nativas** | Alcance de plataforma grande. | Fases: modelo `Organization` + `tenantId`, políticas por recurso, motor Liquidsoap o SaaS Icecast, pgvector u otro índice, Capacitor/React Native. |
 
 ## Arquitectura prevista (roadmap)
 

@@ -47,12 +47,13 @@ model User {
 }
 
 model AppSettings {
-  id           String   @id @default("global")
-  stationName  String   @default("RadioFlow Studio")
-  tagline      String?
-  primaryColor String?  @default("#38bdf8")
-  logoUrl      String?
-  updatedAt    DateTime @updatedAt
+  id                       String   @id @default("global")
+  stationName              String   @default("RadioFlow Studio")
+  tagline                  String?
+  primaryColor             String?  @default("#38bdf8")
+  logoUrl                  String?
+  activeStreamingTargetId  String?
+  updatedAt                DateTime @updatedAt
 }
 
 model MediaAsset {

@@ -32,7 +32,9 @@ Copia `apps/encoder/.env.example` a `apps/encoder/.env` y define:
 |----------|---------|--------|
 | `RADIOFLOW_API_URL` | `http://127.0.0.1:4000` | URL HTTP de la API |
 | `RADIOFLOW_MEDIA_ROOT` | Ruta absoluta al directorio igual que `MEDIA_ROOT` de la API | Imprescindible si en BD las rutas son relativas |
-| `RADIOFLOW_ICECAST_URL` | `icecast://source:radioflow_dev@127.0.0.1:8000/stream` | Usuario típico `source`; contraseña = `ICECAST_SOURCE_PASSWORD` del contenedor |
+| `RADIOFLOW_ICECAST_URL` | `icecast://source:radioflow_dev@127.0.0.1:8000/stream` | Opcional si usas **destino activo** en Marca + `RADIOFLOW_TOKEN` (el encoder llama a `GET /api/streaming/encoder-url`). Si defines esta variable, **tiene prioridad** sobre la API. |
+| `RADIOFLOW_ICECAST_REFRESH_MS` | `120000` | Si no hay `RADIOFLOW_ICECAST_URL`, reconsulta la URL en la API cada N ms. |
+| `RADIOFLOW_TOKEN` | JWT (rol **dj** o superior) | Necesario para resolver la URL de salida desde la API. |
 | `ENABLE_FFMPEG` | `0` luego `1` | Primero comprueba logs; con `1` lanza FFmpeg |
 
 Flujo interno:

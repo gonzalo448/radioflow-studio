@@ -10,6 +10,7 @@ const patchSettings = z.object({
   tagline: z.string().nullable().optional(),
   primaryColor: z.string().min(1).nullable().optional(),
   logoUrl: z.string().max(2048).nullable().optional(),
+  activeStreamingTargetId: z.string().nullable().optional(),
 });
 
 export const settingsRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
@@ -22,6 +23,12 @@ export const settingsRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
   app.patch("/settings", async (request, reply) => {
     if (!requireRoles(request, reply, ROLES_SCHEDULE_WRITE)) return;
     const body = patchSettings.parse(request.body);
+    if (body.activeStreamingTargetId) {
+      const t = await prisma.streamingTarget.findFirst({
+        where: { id: body.activeStreamingTargetId, enabled: true },
+      });
+      if (!t) return reply.status(400).send({ error: "Destino de streaming no válido o deshabilitado" });
+    }
     return prisma.appSettings.upsert({
       where: { id: "global" },
       create: {
@@ -30,6 +37,7 @@ export const settingsRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         tagline: body.tagline ?? undefined,
         primaryColor: body.primaryColor ?? "#38bdf8",
         logoUrl: body.logoUrl ?? undefined,
+        activeStreamingTargetId: body.activeStreamingTargetId ?? undefined,
       },
       update: body,
     });

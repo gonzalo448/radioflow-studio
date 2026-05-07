@@ -8,11 +8,15 @@ type Settings = {
   tagline: string | null;
   primaryColor: string | null;
   logoUrl: string | null;
+  activeStreamingTargetId: string | null;
 };
+
+type StreamStub = { id: string; name: string };
 
 export function SettingsPage() {
   const { token, user } = useAuth();
   const [s, setS] = useState<Settings | null>(null);
+  const [streamTargets, setStreamTargets] = useState<StreamStub[]>([]);
   const [bootErr, setBootErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const canEdit = user?.role === "admin" || user?.role === "editor";
@@ -26,6 +30,13 @@ export function SettingsPage() {
       .catch((e) => setBootErr(e instanceof Error ? e.message : "Error"));
   }, []);
 
+  useEffect(() => {
+    if (!token || !canEdit) return;
+    apiFetch<{ id: string; name: string }[]>("/api/streaming/targets", { token })
+      .then(setStreamTargets)
+      .catch(() => setStreamTargets([]));
+  }, [token, canEdit]);
+
   async function onSave(e: FormEvent) {
     e.preventDefault();
     if (!token || !s) return;
@@ -38,6 +49,7 @@ export function SettingsPage() {
           tagline: s.tagline,
           primaryColor: s.primaryColor,
           logoUrl: s.logoUrl,
+          activeStreamingTargetId: s.activeStreamingTargetId ?? null,
         }),
       });
       setS(updated);
@@ -57,7 +69,10 @@ export function SettingsPage() {
   return (
     <section className="card">
       <h1>Marca y cabecera</h1>
-      <p className="muted">Afecta al panel (variable CSS <code>--accent</code>) y metadatos públicos.</p>
+      <p className="muted">
+        Afecta al panel (variable CSS <code>--accent</code>), metadatos públicos y el destino que el encoder puede
+        resolver vía API (token dj+).
+      </p>
       {!canEdit && <p className="badge">Solo lectura · editor o admin para cambiar</p>}
       {msg && <p className={msg === "Guardado" ? "badge" : "error"}>{msg}</p>}
       <form className="form" onSubmit={onSave}>
@@ -93,7 +108,31 @@ export function SettingsPage() {
             onChange={(e) => setS({ ...s, logoUrl: e.target.value || null })}
           />
         </label>
-        {canEdit && token && (
+        {canEdit && token && streamTargets.length > 0 && (
+          <label>
+            Destino activo para el encoder (FFmpeg)
+            <select
+              className="select"
+              value={s.activeStreamingTargetId ?? ""}
+              disabled={!canEdit}
+              onChange={(e) =>
+                setS({ ...s, activeStreamingTargetId: e.target.value ? e.target.value : null })
+              }
+            >
+              <option value="">Ninguno — solo variable de entorno del encoder</option>
+              {streamTargets.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {canEdit && token && streamTargets.length === 0 && (
+          <p className="muted small">
+            Crea primero un destino en <strong>Streaming</strong> para elegir la salida del encoder aquí.
+          </p>
+        )}
           <button type="submit" className="btn primary">
             Guardar
           </button>

@@ -2,7 +2,15 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import type { Env } from "../config.js";
 import { prisma } from "../db.js";
-import { optionalAuth, requireRoles, requireUser, ROLES_STREAMING_WRITE } from "../lib/auth.js";
+import {
+  optionalAuth,
+  requireRoles,
+  requireUser,
+  ROLES_STATION_WRITE,
+  ROLES_STREAMING_WRITE,
+} from "../lib/auth.js";
+import { buildEncoderSourceUrl } from "../lib/streaming-url.js";
+import { getOrCreateSettings } from "../services/app-settings.js";
 
 const targetBody = z.object({
   name: z.string().min(1),
@@ -57,6 +65,27 @@ export const streamingRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opt
     const row = await prisma.streamingTarget.findUnique({ where: { id } });
     if (!row) return reply.status(404).send({ error: "Destino no encontrado" });
     return sanitize(row);
+  });
+
+  app.get("/streaming/encoder-url", async (request, reply) => {
+    if (!requireRoles(request, reply, ROLES_STATION_WRITE)) return;
+    const settings = await getOrCreateSettings();
+    if (!settings.activeStreamingTargetId) {
+      return reply.status(404).send({ error: "Configura un destino activo en Marca (ajustes)" });
+    }
+    const target = await prisma.streamingTarget.findUnique({
+      where: { id: settings.activeStreamingTargetId },
+    });
+    if (!target?.enabled) {
+      return reply.status(404).send({ error: "Destino activo no encontrado o deshabilitado" });
+    }
+    const url = buildEncoderSourceUrl(target);
+    return {
+      url,
+      targetId: target.id,
+      name: target.name,
+      protocol: target.protocol,
+    };
   });
 
   app.post("/streaming/targets", async (request, reply) => {

@@ -2,6 +2,9 @@
  * Servicio de salida: estado de la estación por WebSocket (prioritario) o polling,
  * y FFmpeg opcional hacia Icecast. Resuelve rutas relativas con RADIOFLOW_MEDIA_ROOT
  * (misma raíz que MEDIA_ROOT de la API cuando corre en el mismo equipo).
+ *
+ * URL de salida: `RADIOFLOW_ICECAST_URL` tiene prioridad; si está vacía y hay `RADIOFLOW_TOKEN`
+ * (rol dj+), se usa `GET /api/streaming/encoder-url` (destino activo en Marca).
  */
 
 import path from "node:path";
@@ -9,7 +12,8 @@ import WebSocket from "ws";
 
 const API = process.env.RADIOFLOW_API_URL ?? "http://127.0.0.1:4000";
 const TOKEN = process.env.RADIOFLOW_TOKEN ?? "";
-const ICECAST_URL = process.env.RADIOFLOW_ICECAST_URL ?? "";
+const ICECAST_ENV = process.env.RADIOFLOW_ICECAST_URL?.trim() ?? "";
+const ICECAST_REFRESH_MS = Number(process.env.RADIOFLOW_ICECAST_REFRESH_MS ?? "120000");
 const POLL_MS = Number(process.env.RADIOFLOW_POLL_MS ?? "15000");
 const ENABLE_FFMPEG = process.env.ENABLE_FFMPEG === "1";
 const USE_WS = process.env.RADIOFLOW_USE_WS !== "0";
@@ -22,11 +26,37 @@ let lastAbs: string | null = null;
 let ffmpegChild: import("node:child_process").ChildProcess | null = null;
 let wsConnected = false;
 let wsReconnectAttempt = 0;
+/** URL efectiva: env fijo o última resolución desde la API. */
+let effectiveIcecastUrl = ICECAST_ENV;
 
 function log(msg: string, extra?: unknown) {
   const t = new Date().toISOString();
   if (extra !== undefined) console.log(`[${t}] [encoder]`, msg, extra);
   else console.log(`[${t}] [encoder]`, msg);
+}
+
+async function refreshEncoderOutputUrl() {
+  if (ICECAST_ENV) {
+    effectiveIcecastUrl = ICECAST_ENV;
+    return;
+  }
+  if (!TOKEN) {
+    effectiveIcecastUrl = "";
+    return;
+  }
+  try {
+    const r = await fetch(`${API}/api/streaming/encoder-url`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (!r.ok) return;
+    const j = (await r.json()) as { url?: string };
+    if (j.url) {
+      effectiveIcecastUrl = j.url;
+      log("Salida Icecast desde API (destino activo en Marca)");
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function wsUrlFromApi(): string {
@@ -89,13 +119,17 @@ async function handleTrackFromDbPath(dbPath: string | null | undefined, title?: 
   lastAbs = abs;
   log(`Pista: ${title ?? "?"}`, abs);
 
-  if (!ICECAST_URL) {
-    log("Define RADIOFLOW_ICECAST_URL para comando FFmpeg.");
+  if (!ICECAST_ENV) {
+    await refreshEncoderOutputUrl();
+  }
+
+  if (!effectiveIcecastUrl) {
+    log("Define RADIOFLOW_ICECAST_URL o configura destino activo en Marca + RADIOFLOW_TOKEN (dj+).");
     log(ffmpegCommandLine(abs, "icecast://source:PASS@host:8000/stream"));
     return;
   }
 
-  const cmdline = ffmpegCommandLine(abs, ICECAST_URL);
+  const cmdline = ffmpegCommandLine(abs, effectiveIcecastUrl);
   log("Comando sugerido:", cmdline);
 
   if (!ENABLE_FFMPEG) {
@@ -108,7 +142,7 @@ async function handleTrackFromDbPath(dbPath: string | null | undefined, title?: 
     ffmpegChild.kill("SIGTERM");
     ffmpegChild = null;
   }
-  ffmpegChild = spawn("ffmpeg", ffmpegArgs(abs, ICECAST_URL), { stdio: "inherit" });
+  ffmpegChild = spawn("ffmpeg", ffmpegArgs(abs, effectiveIcecastUrl), { stdio: "inherit" });
   ffmpegChild.on("exit", (code) => log(`FFmpeg terminó (${code})`));
 }
 
@@ -167,8 +201,16 @@ function connectWs() {
 }
 
 log(
-  `API=${API} · WS=${USE_WS} · poll=${POLL_MS}ms · ICECAST=${Boolean(ICECAST_URL)} · MEDIA_ROOT=${MEDIA_ROOT || "(vacío)"}`,
+  `API=${API} · WS=${USE_WS} · poll=${POLL_MS}ms · ICECAST_ENV=${Boolean(ICECAST_ENV)} · MEDIA_ROOT=${MEDIA_ROOT || "(vacío)"}`,
 );
+
+void refreshEncoderOutputUrl().catch(() => {});
+
+if (ICECAST_REFRESH_MS >= 5000 && !ICECAST_ENV && TOKEN) {
+  setInterval(() => {
+    void refreshEncoderOutputUrl();
+  }, ICECAST_REFRESH_MS);
+}
 
 if (USE_WS) {
   connectWs();

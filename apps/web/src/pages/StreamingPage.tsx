@@ -28,6 +28,14 @@ export function StreamingPage() {
   const [mountPath, setMountPath] = useState("/stream");
   const [sourcePassword, setSourcePassword] = useState("");
 
+  const [activeEncoderId, setActiveEncoderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings")
+      .then((st) => setActiveEncoderId(st.activeStreamingTargetId ?? null))
+      .catch(() => setActiveEncoderId(null));
+  }, []);
+
   const load = useCallback(async () => {
     if (!token) {
       setTargets([]);
@@ -72,6 +80,8 @@ export function StreamingPage() {
       setMsg(null);
       setSourcePassword("");
       await load();
+      const st = await apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings");
+      setActiveEncoderId(st.activeStreamingTargetId ?? null);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -82,6 +92,8 @@ export function StreamingPage() {
     try {
       await apiFetch(`/api/streaming/targets/${id}`, { method: "DELETE", token });
       await load();
+      const st = await apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings");
+      setActiveEncoderId(st.activeStreamingTargetId ?? null);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -146,6 +158,11 @@ export function StreamingPage() {
           <li key={t.id}>
             <div>
               <strong>{t.name}</strong>{" "}
+              {activeEncoderId === t.id && (
+                <span className="badge" style={{ marginLeft: "0.35rem" }}>
+                  Salida encoder
+                </span>
+              )}{" "}
               <span className="muted">
                 {t.protocol}://{t.host}:{t.port}
                 {t.mountPath} · TLS: {t.tls ? "sí" : "no"} · clave: {t.hasSourcePassword ? "definida" : "no"}
