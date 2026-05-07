@@ -1,0 +1,49 @@
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import websocket from "@fastify/websocket";
+import { loadEnv } from "./config.js";
+import { healthRoutes } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
+import { usersRoutes } from "./routes/users.js";
+import { libraryRoutes } from "./routes/library.js";
+import { stationRoutes } from "./routes/station.js";
+import { scheduleRoutes } from "./routes/schedule.js";
+import { playlistRoutes } from "./routes/playlists.js";
+import { streamingRoutes } from "./routes/streaming.js";
+import { wsStationRoutes } from "./routes/ws-station.js";
+
+const env = loadEnv();
+
+const app = Fastify({ logger: true });
+
+await app.register(cors, {
+  origin: env.CORS_ORIGIN.split(",").map((s) => s.trim()),
+  credentials: true,
+});
+
+await app.register(websocket);
+await app.register(healthRoutes, { prefix: "/api" });
+await app.register(authRoutes, { prefix: "/api", env });
+await app.register(usersRoutes, { prefix: "/api", env });
+await app.register(libraryRoutes, { prefix: "/api" });
+await app.register(stationRoutes, { prefix: "/api", env });
+await app.register(scheduleRoutes, { prefix: "/api", env });
+await app.register(playlistRoutes, { prefix: "/api" });
+await app.register(streamingRoutes, { prefix: "/api", env });
+await app.register(wsStationRoutes, { prefix: "/api" });
+
+app.get("/", async () => ({
+  name: "RadioFlow Studio API",
+  docs: "/api/health",
+}));
+
+const start = async () => {
+  try {
+    await app.listen({ port: env.PORT, host: "0.0.0.0" });
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();

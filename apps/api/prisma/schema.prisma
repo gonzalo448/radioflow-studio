@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  editor
+  dj
+  viewer
+}
+
+enum StreamProtocol {
+  icecast
+  shoutcast
+  azuracast
+}
+
+enum StationMode {
+  AUTO
+  LIVE_ASSIST
+  LIVE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  role         Role     @default(viewer)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model MediaAsset {
+  id             String          @id @default(cuid())
+  title          String
+  artist         String?
+  album          String?
+  path           String
+  durationSec    Int?
+  mimeType       String?
+  embeddingRef   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  playlistItems  PlaylistItem[]
+  playQueueItems PlayQueueItem[]
+}
+
+model Playlist {
+  id             String          @id @default(cuid())
+  name           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  items          PlaylistItem[]
+  scheduleBlocks ScheduleBlock[]
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  assetId    String
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  asset      MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, position])
+}
+
+model Station {
+  id              String           @id
+  mode            StationMode      @default(AUTO)
+  currentPosition Int              @default(0)
+  liveTitle       String?
+  updatedAt       DateTime         @updatedAt
+  queue           PlayQueueItem[]
+}
+
+model PlayQueueItem {
+  id        String     @id @default(cuid())
+  stationId String     @default("main")
+  station   Station    @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  position  Int
+  assetId   String
+  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([stationId, position])
+}
+
+model ScheduleBlock {
+  id          String    @id @default(cuid())
+  label       String
+  dayOfWeek   Int
+  startMinute Int
+  endMinute   Int
+  playlistId  String?
+  playlist    Playlist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model StreamingTarget {
+  id             String         @id @default(cuid())
+  name           String
+  protocol       StreamProtocol
+  host           String
+  port           Int            @default(8000)
+  mountPath      String         @default("/stream")
+  sourceUser     String?
+  sourcePassword String
+  publicBaseUrl  String?
+  tls            Boolean        @default(false)
+  enabled        Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
