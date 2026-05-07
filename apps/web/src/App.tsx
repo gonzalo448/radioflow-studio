@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import { Dashboard } from "./pages/Dashboard";
 import { LibraryPage } from "./pages/LibraryPage";
 import { LoginPage } from "./pages/LoginPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaylistDetailPage } from "./pages/PlaylistDetailPage";
 import { PlaylistsPage } from "./pages/PlaylistsPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -15,8 +16,15 @@ import { StreamingPage } from "./pages/StreamingPage";
 function useBranding() {
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
-      .then((s: { stationName?: string; primaryColor?: string | null; tagline?: string | null }) => {
+      .then(async (r) => {
+        if (!r.ok) return;
+        const text = await r.text();
+        let s: { stationName?: string; primaryColor?: string | null; tagline?: string | null };
+        try {
+          s = text ? JSON.parse(text) : {};
+        } catch {
+          return;
+        }
         if (s.primaryColor) {
           document.documentElement.style.setProperty("--accent", s.primaryColor);
         }
@@ -24,7 +32,9 @@ function useBranding() {
           document.title = s.stationName;
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        /* red / marca no crítico */
+      });
   }, []);
 }
 
@@ -72,6 +82,7 @@ export default function App() {
           <Route path="/streaming" element={<StreamingPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
     </div>

@@ -51,9 +51,45 @@ export const libraryRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
     const filePath = resolveAssetFilePath(asset.path, env);
     if (!filePath) return reply.status(404).send({ error: "Archivo no accesible en el servidor" });
     const st = await stat(filePath);
+    const size = st.size;
     reply.header("Accept-Ranges", "bytes");
     reply.type(asset.mimeType ?? "audio/mpeg");
-    reply.header("Content-Length", st.size);
+
+    const rawRange = request.headers.range;
+    if (rawRange && typeof rawRange === "string") {
+      const m = /^bytes=(\d*)-(\d*)$/i.exec(rawRange.trim());
+      if (m) {
+        let start = m[1] ? Number(m[1]) : 0;
+        let end = m[2] ? Number(m[2]) : size - 1;
+        if (Number.isNaN(start) || Number.isNaN(end)) {
+          return reply
+            .status(416)
+            .header("Content-Range", `bytes */${size}`)
+            .send({ error: "Rango inválido" });
+        }
+        if (m[1] === "" && m[2] !== "") {
+          const suffix = Number(m[2]);
+          if (!Number.isNaN(suffix) && suffix > 0) {
+            start = Math.max(0, size - suffix);
+            end = size - 1;
+          }
+        }
+        if (start >= size) {
+          return reply.status(416).header("Content-Range", `bytes */${size}`).send({ error: "Rango fuera de archivo" });
+        }
+        if (end >= size) end = size - 1;
+        if (start > end) {
+          return reply.status(416).header("Content-Range", `bytes */${size}`).send({ error: "Rango inválido" });
+        }
+        const chunk = end - start + 1;
+        reply.code(206);
+        reply.header("Content-Range", `bytes ${start}-${end}/${size}`);
+        reply.header("Content-Length", chunk);
+        return reply.send(createReadStream(filePath, { start, end }));
+      }
+    }
+
+    reply.header("Content-Length", size);
     return reply.send(createReadStream(filePath));
   });
 

@@ -11,6 +11,7 @@ export function PlaylistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token, user } = useAuth();
   const [pl, setPl] = useState<PlDetail | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [pick, setPick] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -18,8 +19,14 @@ export function PlaylistDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const d = await apiFetch<PlDetail>(`/api/playlists/${id}`);
-    setPl(d);
+    try {
+      const d = await apiFetch<PlDetail>(`/api/playlists/${id}`);
+      setPl(d);
+      setLoadErr(null);
+    } catch (e) {
+      setPl(null);
+      setLoadErr(e instanceof Error ? e.message : "Error");
+    }
   }, [id]);
 
   useEffect(() => {
@@ -27,9 +34,9 @@ export function PlaylistDetailPage() {
   }, [load]);
 
   useEffect(() => {
-    fetch("/api/library/assets")
-      .then((r) => r.json())
-      .then(setAssets);
+    apiFetch<Asset[]>("/api/library/assets")
+      .then(setAssets)
+      .catch(() => setAssets([]));
   }, []);
 
   async function addItem() {
@@ -84,6 +91,7 @@ export function PlaylistDetailPage() {
   }
 
   if (!id) return <p>Falta id</p>;
+  if (loadErr) return <p className="error card">{loadErr}</p>;
   if (!pl) return <p>Cargando…</p>;
 
   return (

@@ -25,6 +25,7 @@ function stationWsUrl() {
 export function StationPage() {
   const { token, user } = useAuth();
   const [state, setState] = useState<StationState | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [playlists, setPlaylists] = useState<Pl[]>([]);
   const [plPick, setPlPick] = useState("");
@@ -36,8 +37,13 @@ export function StationPage() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const s = await apiFetch<StationState>("/api/station");
-    setState(s);
+    try {
+      const s = await apiFetch<StationState>("/api/station");
+      setState(s);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "No se pudo cargar la estación");
+    }
   }, []);
 
   useEffect(() => {
@@ -45,15 +51,13 @@ export function StationPage() {
   }, [load]);
 
   useEffect(() => {
-    fetch("/api/library/assets")
-      .then((r) => r.json())
+    apiFetch<Asset[]>("/api/library/assets")
       .then(setAssets)
       .catch(() => setAssets([]));
   }, []);
 
   useEffect(() => {
-    fetch("/api/playlists")
-      .then((r) => r.json())
+    apiFetch<Pl[]>("/api/playlists")
       .then(setPlaylists)
       .catch(() => setPlaylists([]));
   }, []);
@@ -180,6 +184,16 @@ export function StationPage() {
     }
   }
 
+  if (loadError) {
+    return (
+      <section className="card">
+        <p className="error">{loadError}</p>
+        <button type="button" className="btn" onClick={() => void load()}>
+          Reintentar
+        </button>
+      </section>
+    );
+  }
   if (!state) return <p>Cargando estación…</p>;
 
   return (

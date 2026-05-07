@@ -13,13 +13,17 @@ type Settings = {
 export function SettingsPage() {
   const { token, user } = useAuth();
   const [s, setS] = useState<Settings | null>(null);
+  const [bootErr, setBootErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const canEdit = user?.role === "admin" || user?.role === "editor";
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then(setS);
+    apiFetch<Settings>("/api/settings")
+      .then((data) => {
+        setS(data);
+        setBootErr(null);
+      })
+      .catch((e) => setBootErr(e instanceof Error ? e.message : "Error"));
   }, []);
 
   async function onSave(e: FormEvent) {
@@ -47,6 +51,7 @@ export function SettingsPage() {
     }
   }
 
+  if (bootErr) return <p className="error card">{bootErr}</p>;
   if (!s) return <p>Cargando…</p>;
 
   return (
@@ -54,7 +59,7 @@ export function SettingsPage() {
       <h1>Marca y cabecera</h1>
       <p className="muted">Afecta al panel (variable CSS <code>--accent</code>) y metadatos públicos.</p>
       {!canEdit && <p className="badge">Solo lectura · editor o admin para cambiar</p>}
-      {msg && <p className="error">{msg}</p>}
+      {msg && <p className={msg === "Guardado" ? "badge" : "error"}>{msg}</p>}
       <form className="form" onSubmit={onSave}>
         <label>
           Nombre de la emisora

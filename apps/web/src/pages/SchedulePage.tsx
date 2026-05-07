@@ -39,6 +39,7 @@ export function SchedulePage() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [playlists, setPlaylists] = useState<{ id: string; name: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [schedErr, setSchedErr] = useState<string | null>(null);
   const [hints, setHints] = useState<TodayHints | null>(null);
   const [stationBrief, setStationBrief] = useState<StationBrief["station"] | null>(null);
 
@@ -55,8 +56,14 @@ export function SchedulePage() {
   };
 
   const load = useCallback(async () => {
-    const data = await apiFetch<Block[]>("/api/schedule");
-    setBlocks(data);
+    try {
+      const data = await apiFetch<Block[]>("/api/schedule");
+      setBlocks(data);
+      setSchedErr(null);
+    } catch (e) {
+      setSchedErr(e instanceof Error ? e.message : "Error");
+      setBlocks([]);
+    }
   }, []);
 
   const loadHintsAndStation = useCallback(async () => {
@@ -84,9 +91,8 @@ export function SchedulePage() {
   }, [loadHintsAndStation]);
 
   useEffect(() => {
-    fetch("/api/playlists")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { id: string; name: string }[]) => setPlaylists(rows))
+    apiFetch<{ id: string; name: string }[]>("/api/playlists")
+      .then(setPlaylists)
       .catch(() => setPlaylists([]));
   }, []);
 
@@ -178,6 +184,7 @@ export function SchedulePage() {
           Rol: <code>{user.role}</code> · edición requiere editor o admin
         </p>
       )}
+      {schedErr && <p className="error">{schedErr}</p>}
       {msg && <p className="error">{msg}</p>}
       <form className="form inline-grid" onSubmit={onCreate}>
         <label>

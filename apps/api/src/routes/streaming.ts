@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import type { Env } from "../config.js";
 import { prisma } from "../db.js";
-import { optionalAuth, requireRoles, ROLES_STREAMING_WRITE } from "../lib/auth.js";
+import { optionalAuth, requireRoles, requireUser, ROLES_STREAMING_WRITE } from "../lib/auth.js";
 
 const targetBody = z.object({
   name: z.string().min(1),
@@ -45,12 +45,14 @@ function sanitize(t: {
 export const streamingRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
   app.addHook("preHandler", async (request) => optionalAuth(request, opts.env));
 
-  app.get("/streaming/targets", async () => {
+  app.get("/streaming/targets", async (request, reply) => {
+    if (!requireUser(request, reply)) return;
     const rows = await prisma.streamingTarget.findMany({ orderBy: { name: "asc" } });
     return rows.map(sanitize);
   });
 
   app.get("/streaming/targets/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return;
     const { id } = request.params as { id: string };
     const row = await prisma.streamingTarget.findUnique({ where: { id } });
     if (!row) return reply.status(404).send({ error: "Destino no encontrado" });

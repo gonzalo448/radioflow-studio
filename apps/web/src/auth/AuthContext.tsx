@@ -53,7 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout();
       return;
     }
-    setUser(await r.json());
+    const text = await r.text();
+    try {
+      setUser(text ? JSON.parse(text) : null);
+    } catch {
+      logout();
+    }
   }, [token, logout]);
 
   useEffect(() => {

@@ -5,7 +5,7 @@ Plataforma integral de automatización y gestión radial: programación, librer�
 ## Requisitos
 
 - Node.js 20+
-- Docker Desktop (para PostgreSQL y Redis de desarrollo)
+- Docker Desktop (para PostgreSQL y Redis opcional de desarrollo)
 - npm (workspaces en la raíz)
 
 ## Arranque rápido
@@ -26,7 +26,7 @@ Plataforma integral de automatización y gestión radial: programación, librer�
 
 2. **Variables de entorno**
 
-   Copia `.env.example` a `apps/api/.env` para desarrollo **local** (API con `npm run dev`). Con solo Docker, define al menos `JWT_SECRET` en el entorno o en un `.env` en la raíz para el servicio `api` (ver `docker-compose.yml`).
+   Copia `.env.example` de la **raíz** o `apps/api/.env.example` a `apps/api/.env` para desarrollo **local** (API con `npm run dev`). Con solo Docker, define al menos `JWT_SECRET` en el entorno o en un `.env` en la raíz para el servicio `api` (ver `docker-compose.yml`).
 
 3. **Dependencias y base de datos (desarrollo sin contenedor API)**
 
@@ -105,7 +105,7 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 - `GET|POST /api/schedule` y `PATCH|DELETE /api/schedule/:id` — parrilla semanal (`editor`, `admin` para escritura)
 - `GET /api/schedule/today-hints` — bloques del día y cuáles cubren el minuto actual
 - `GET|POST /api/playlists` — listados / crear playlist vacía
-- `GET|POST /api/streaming/targets`, `PATCH|DELETE …` — destinos Icecast/Shoutcast/AzuraCast
+- `GET|POST /api/streaming/targets`, `PATCH|DELETE …` — destinos Icecast/Shoutcast/AzuraCast (**lectura y detalle requieren sesión**)
 
 ### Automatización de parrilla (`@radioflow/schedule-worker`)
 

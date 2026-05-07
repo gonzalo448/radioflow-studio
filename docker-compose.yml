@@ -17,6 +17,7 @@ services:
       retries: 5
 
   redis:
+    # Reservado (caché / colas / locks). La API v0.1 aún no lo usa; puedes omitir el servicio o dejarlo para extensiones.
     image: redis:7-alpine
     restart: unless-stopped
     ports:

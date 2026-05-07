@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 
@@ -20,20 +20,26 @@ export function LibraryPage() {
   const canUpload = user?.role === "admin" || user?.role === "editor" || user?.role === "dj";
   const canEnrich = user?.role === "admin" || user?.role === "editor";
 
-  const load = (query?: string) => {
+  const load = useCallback(async (query?: string) => {
     setLoading(true);
-    const url = query?.trim()
-      ? `/api/library/assets?q=${encodeURIComponent(query.trim())}`
-      : "/api/library/assets";
-    fetch(url)
-      .then((r) => r.json())
-      .then(setAssets)
-      .finally(() => setLoading(false));
-  };
+    setMsg(null);
+    try {
+      const url = query?.trim()
+        ? `/api/library/assets?q=${encodeURIComponent(query.trim())}`
+        : "/api/library/assets";
+      const data = await apiFetch<Asset[]>(url);
+      setAssets(data);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Error al cargar");
+      setAssets([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   async function onSearch(e: FormEvent) {
     e.preventDefault();
