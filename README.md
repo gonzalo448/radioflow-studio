@@ -44,6 +44,12 @@ Plataforma integral de automatización y gestión radial: programación, librer�
    npm run dev
    ```
 
+   **Pruebas de humo** (API levantada y `DATABASE_URL` + `JWT_SECRET` definidos):
+
+   ```bash
+   npm run smoke:api
+   ```
+
    Opcional: `npm run dev:auto` — API + PWA + encoder (WS) + **schedule-worker** (parrilla automática).
 
    - Panel: [http://localhost:5173](http://localhost:5173)
@@ -60,7 +66,7 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 | `apps/web` | Frontend React + Vite + PWA (instalable en móvil/tablet/escritorio) |
 | `apps/schedule-worker` | Automatización de parrilla: bloque activo → `queue-from-playlist` |
 | `packages/shared` | Tipos y contratos compartidos |
-| `docker-compose.yml` | PostgreSQL 16, Redis 7, **API** (imagen Docker) y perfil opcional `workers` |
+| `docker-compose.yml` | PostgreSQL 16, Redis 7, **API** (imagen Docker), Icecast opcional (`profile broadcast`) y perfil `workers` |
 
 ## API útil (v0.1)
 
@@ -99,14 +105,16 @@ Tras el primer registro, puedes promover un usuario a administrador con Prisma S
 
 `@radioflow/encoder` usa por defecto **`ws://…/api/ws/station`** y hace polling de respaldo. Define **`RADIOFLOW_MEDIA_ROOT`** apuntando al mismo directorio que `MEDIA_ROOT` de la API para resolver rutas relativas de los archivos.
 
+**Salida hacia Icecast**: guía paso a paso en [docs/streaming-encoder-icecast.md](docs/streaming-encoder-icecast.md). Icecast de prueba en Docker: `npm run docker:broadcast` (perfil `broadcast`).
+
+Variables típicas del encoder: ver `apps/encoder/.env.example` (`RADIOFLOW_ICECAST_URL`, `ENABLE_FFMPEG`).
+
 ## Arquitectura prevista (roadmap)
 
 1. **Frontend**: React PWA hoy; apps nativas (Capacitor/React Native) como extensión del mismo panel.
 2. **Backend**: motor de parrilla, cola de reproducción y hooks hacia codificadores (FFmpeg / liquidsoap) en fases posteriores.
 3. **Streaming**: montaje sobre Icecast/Shoutcast o instancia AzuraCast; esta capa vivirá como servicios configurables en la API.
 4. **IA**: cliente hacia Ollama local o Perplexica para embeddings, recomendaciones y enriquecimiento de metadatos.
-
-Variables típicas del encoder: ver `apps/encoder/.env.example` (`RADIOFLOW_ICECAST_URL`, `ENABLE_FFMPEG`).
 
 ## Licencia
 

@@ -19,7 +19,9 @@
     "db:studio": "npm run db:studio -w @radioflow/api",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:workers": "docker compose --profile workers up -d schedule-worker"
+    "docker:workers": "docker compose --profile workers up -d schedule-worker",
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "docker:broadcast": "docker compose --profile broadcast up -d icecast"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

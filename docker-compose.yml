@@ -70,6 +70,18 @@ services:
   #   volumes:
   #     - ollama_data:/root/.ollama
 
+  # Icecast 2 de prueba (encoder → icecast://source:PASS@127.0.0.1:8000/stream).
+  icecast:
+    profiles: ["broadcast"]
+    image: infiniteproject/icecast:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-radioflow_dev}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:-radioflow_admin_dev}
+      ICECAST_RELAY_PASSWORD: ${ICECAST_RELAY_PASSWORD:-radioflow_relay_dev}
+
   # Perfil opcional: worker de parrilla — la API debe estar en el host (p. ej. :4000).
   schedule-worker:
     profiles: ["workers"]

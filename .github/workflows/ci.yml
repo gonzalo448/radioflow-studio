@@ -6,8 +6,31 @@ on:
   pull_request:
 
 jobs:
-  build:
+  build-and-smoke:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: radioflow
+          POSTGRES_PASSWORD: radioflow_dev
+          POSTGRES_DB: radioflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U radioflow -d radioflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://radioflow:radioflow_dev@localhost:5432/radioflow
+      JWT_SECRET: ci-smoke-jwt-secret-32-chars-minimum-x
+      CORS_ORIGIN: http://localhost:5173
+      NODE_ENV: test
+      MEDIA_ROOT: data/media/ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -31,3 +54,24 @@ jobs:
 
       - name: Build web
         run: npm run build -w @radioflow/web
+
+      - name: Migrate DB & smoke API
+        run: |
+          set -e
+          cd apps/api
+          npx prisma migrate deploy
+          node dist/index.js &
+          API_PID=$!
+          trap 'kill $API_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -sf http://127.0.0.1:4000/api/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 45 ]; then
+              echo "API no respondió a /api/health/ready a tiempo"
+              exit 1
+            fi
+            sleep 1
+          done
+          cd ../..
+          node scripts/smoke-api.mjs
