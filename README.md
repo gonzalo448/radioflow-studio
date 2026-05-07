@@ -50,6 +50,18 @@ Plataforma integral de automatización y gestión radial: programación, librer�
    npm run smoke:api
    ```
 
+   Por defecto solo comprueba health, BD, estación, settings y registro. Para **incluir** subida a biblioteca, playlist y `queue-from-playlist`, define `SMOKE_PROMOTE_TO_EDITOR=1` (sube el usuario a rol *editor* en la BD; **solo en entornos de prueba**):
+
+   ```bash
+   # Linux / macOS
+   SMOKE_PROMOTE_TO_EDITOR=1 DATABASE_URL=postgresql://... npm run smoke:api
+
+   # Windows PowerShell
+   $env:SMOKE_PROMOTE_TO_EDITOR="1"; $env:DATABASE_URL="postgresql://..."; npm run smoke:api
+   ```
+
+   La CI ejecuta el humo **profundo** automáticamente.
+
    Opcional: `npm run dev:auto` — API + PWA + encoder (WS) + **schedule-worker** (parrilla automática).
 
    - Panel: [http://localhost:5173](http://localhost:5173)
@@ -115,6 +127,13 @@ Variables típicas del encoder: ver `apps/encoder/.env.example` (`RADIOFLOW_ICEC
 2. **Backend**: motor de parrilla, cola de reproducción y hooks hacia codificadores (FFmpeg / liquidsoap) en fases posteriores.
 3. **Streaming**: montaje sobre Icecast/Shoutcast o instancia AzuraCast; esta capa vivirá como servicios configurables en la API.
 4. **IA**: cliente hacia Ollama local o Perplexica para embeddings, recomendaciones y enriquecimiento de metadatos.
+
+## Integración continua (GitHub Actions)
+
+El workflow `.github/workflows/ci.yml` ejecuta en paralelo:
+
+- **build-and-smoke**: dependencias, build de shared/API/web, Postgres de servicio, migraciones, API en segundo plano y `scripts/smoke-api.mjs` con humo **profundo** (`SMOKE_PROMOTE_TO_EDITOR=1`: upload, playlist, cola).
+- **icecast-reachable**: `docker compose --profile broadcast up -d icecast` y comprobación HTTP al puerto **8000** (sin FFmpeg).
 
 ## Licencia
 

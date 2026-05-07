@@ -30,6 +30,7 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
       NODE_ENV: test
       MEDIA_ROOT: data/media/ci
+      SMOKE_PROMOTE_TO_EDITOR: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -75,3 +76,29 @@ jobs:
           done
           cd ../..
           node scripts/smoke-api.mjs
+
+  # Sin FFmpeg: solo comprueba que Icecast levanta y el puerto 8000 responde HTTP.
+  icecast-reachable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Icecast (perfil broadcast)
+        run: docker compose --profile broadcast up -d icecast
+
+      - name: Esperar respuesta HTTP en :8000
+        run: |
+          set -e
+          for i in $(seq 1 40); do
+            if curl -sf --max-time 3 http://127.0.0.1:8000/ >/dev/null; then
+              echo "Icecast accesible en http://127.0.0.1:8000"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Icecast no respondió a tiempo"
+          exit 1
+
+      - name: Detener Icecast
+        if: always()
+        run: docker compose down
