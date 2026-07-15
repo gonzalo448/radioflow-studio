@@ -1,0 +1,40 @@
+# API en Debian con **cron del sistema** + generación horaria de M3U (equivalente al CRA:
+#   apt-get install cron, /etc/cron.d/cronjob, `cron && node …`).
+#
+# Construir (raíz del monorepo):
+#   docker build -f Dockerfile.api-with-debian-cron -t radioflow-api:debian-cron .
+#
+# Arranque: `entrypoint-api-with-cron.sh` ejecuta `cron` y luego `prisma migrate deploy` + `node dist/index.js`.
+# La tarea horaria está en `docker/liquidsoap-cronjob` (copiada a `/etc/cron.d/radioflow-liquidsoap`).
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+COPY apps/web/package.json ./apps/web/package.json
+RUN npm install
+RUN npm run build -w @radioflow/shared
+WORKDIR /app/apps/api
+ARG DATABASE_URL="postgresql://radioflow:radioflow_dev@localhost:5432/radioflow"
+ENV DATABASE_URL=$DATABASE_URL
+RUN npx prisma generate && npm run build
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
+COPY docker/liquidsoap-cronjob /etc/cron.d/radioflow-liquidsoap
+RUN chmod 0644 /etc/cron.d/radioflow-liquidsoap
+COPY docker/entrypoint-api-with-cron.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+COPY package.json package-lock.json* ./
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+COPY apps/web/package.json ./apps/web/package.json
+RUN npm install --omit=dev
+WORKDIR /app/apps/api
+RUN npx prisma generate
+COPY --from=build /app/apps/api/dist ./dist
+COPY --from=build /app/packages/shared/dist ../packages/shared/dist
+EXPOSE 4000
+ENTRYPOINT ["/entrypoint.sh"]

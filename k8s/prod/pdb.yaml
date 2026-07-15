@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: radioflow-api
+  namespace: radioflow
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: radioflow-api
+

@@ -1,14 +1,21 @@
 {
   "name": "@radioflow/encoder",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Proceso auxiliar: sondea /api/station y sugiere línea FFmpeg hacia Icecast",
+  "description": "WS/polling + FFmpeg opcional hacia Icecast",
+  "dependencies": {
+    "@radioflow/shared": "*",
+    "dotenv": "^16.4.7",
+    "ws": "^8.18.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.13",
     "@types/node": "^22.10.7",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"

@@ -1,0 +1,76 @@
+{
+  "name": "@radioflow/desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "RadioFlow Studio desktop (Electron)",
+  "main": "electron-main.cjs",
+  "scripts": {
+    "dev": "concurrently -k -n api,web,el -c blue,magenta,cyan \"npm run dev -w @radioflow/api --prefix ../..\" \"npm run dev -w @radioflow/web --prefix ../..\" \"wait-on tcp:127.0.0.1:5173 tcp:127.0.0.1:4000 && cross-env RADIOFLOW_DEV=1 electron .\"",
+    "dev:electron-only": "cross-env RADIOFLOW_DEV=1 electron .",
+    "dist": "node ../../scripts/desktop-electron-pack.mjs",
+    "dist:win": "node ../../scripts/desktop-electron-pack.mjs --win",
+    "dist:mac": "node ../../scripts/desktop-electron-pack.mjs --mac",
+    "dist:linux": "node ../../scripts/desktop-electron-pack.mjs --linux",
+    "dist:launch": "node ../../scripts/desktop-electron-pack.mjs --launch"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "34.2.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.radioflow.studio",
+    "productName": "RadioFlow Studio",
+    "executableName": "radioflow-studio",
+    "directories": {
+      "output": "dist-pack"
+    },
+    "files": [
+      "electron-main.cjs",
+      "auto-updater.cjs",
+      "preload.cjs",
+      "cab-meter-hud.html",
+      "cab-meter-hud-preload.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web",
+        "filter": ["**/*"]
+      },
+      {
+        "from": ".embedded-api",
+        "to": "api",
+        "filter": ["**/*"]
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "installerLanguages": ["es_ES", "en_US"],
+      "artifactName": "RadioFlow-Studio-Setup-${version}.${ext}",
+      "shortcutName": "RadioFlow Studio",
+      "uninstallDisplayName": "RadioFlow Studio",
+      "deleteAppDataOnUninstall": false
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "mac": {
+      "target": ["dmg"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  }
+}

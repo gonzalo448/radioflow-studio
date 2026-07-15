@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: radioflow-db-migrate
+  namespace: radioflow
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: radioflow-db-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: radioflow-studio-api:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /app/apps/api
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: radioflow-secrets
+                  key: DATABASE_URL
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "[migrate] prisma migrate deploy"
+              npx prisma migrate deploy
+              echo "[migrate] OK"
+

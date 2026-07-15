@@ -1,0 +1,58 @@
+.sesiones-page.sesiones-container {
+  padding: 1rem;
+  color: #f5f5f5;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.sesiones-page .sesiones-title {
+  margin: 0 0 0.75rem;
+}
+
+.sesiones-page .sesiones-toolbar {
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sesiones-page .sesiones-table-wrap {
+  overflow-x: auto;
+}
+
+.sesiones-page .sesiones-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.sesiones-page .sesiones-table th,
+.sesiones-page .sesiones-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #444;
+}
+
+.sesiones-page .sesiones-table th {
+  color: var(--accent, #00aaff);
+}
+
+.sesiones-page .sesiones-revoke {
+  background: #ff4b4b;
+  border: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #fff;
+  font: inherit;
+}
+
+.sesiones-page .sesiones-revoke:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.sesiones-page .sesiones-revoke:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

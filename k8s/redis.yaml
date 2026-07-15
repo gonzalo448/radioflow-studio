@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radioflow-redis-pvc
+  namespace: radioflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radioflow-redis
+  namespace: radioflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radioflow-redis
+  template:
+    metadata:
+      labels:
+        app: radioflow-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: radioflow-redis-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: radioflow
+spec:
+  selector:
+    app: radioflow-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+

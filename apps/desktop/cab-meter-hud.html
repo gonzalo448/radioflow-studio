@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline';" />
+    <title>RadioFlow · VU cabina</title>
+    <style>
+      body {
+        margin: 0;
+        background: transparent;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        overflow: hidden;
+        -webkit-app-region: drag;
+        user-select: none;
+      }
+      .wrap {
+        margin: 8px;
+        padding: 6px 8px 7px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.94);
+        border: 1px solid #334155;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+      }
+      .hdr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+        -webkit-app-region: no-drag;
+      }
+      .label {
+        font-size: 10px;
+        color: #7dd3fc;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+      }
+      .close {
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+      .close:hover {
+        color: #f1f5f9;
+        background: #1e293b;
+      }
+      .track {
+        height: 11px;
+        border-radius: 6px;
+        background: #0f172a;
+        border: 1px solid #243044;
+        overflow: hidden;
+      }
+      .fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #22c55e 0%, #eab308 72%, #ef4444 100%);
+      }
+      .db {
+        text-align: right;
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 4px;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hdr">
+        <span class="label">VU CABINA</span>
+        <button type="button" class="close" id="x" title="Cerrar">×</button>
+      </div>
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div class="db" id="db">—</div>
+    </div>
+    <script>
+      const fill = document.getElementById("fill");
+      const dbEl = document.getElementById("db");
+      document.getElementById("x").addEventListener("click", () => window.close());
+      window.cabHud.onMeter(function (p) {
+        var pct = Math.min(100, Math.round((p && p.peak01) ? p.peak01 * 100 : 0));
+        fill.style.width = pct + "%";
+        if (typeof p.dbFs === "number" && isFinite(p.dbFs)) {
+          dbEl.textContent = p.dbFs.toFixed(1) + " dBFS";
+        } else {
+          dbEl.textContent = "—";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+# Overlay opcional: HTTPS en el borde (junto a docker-compose.edge.prod.yml o edge.dev.yml).
+# Requiere certificados en ./docker/nginx/tls/ y un server { listen 443 ssl } en conf.d
+# (plantilla: docker/nginx/templates/radioflow-https.conf).
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.edge.prod.yml -f docker-compose.edge.tls.yml --profile edge up -d
+
+services:
+  nginx:
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx/tls:/etc/nginx/tls:ro

@@ -1,0 +1,129 @@
+/* Paridad visual con CRA Eventos.css; todo acotado a .eventos-page */
+
+.eventos-page.eventos-container {
+  padding: 1rem;
+  color: #f5f5f5;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.eventos-page .eventos-title {
+  margin: 0 0 0.75rem;
+}
+
+.eventos-page .restricted {
+  color: #ff4b4b;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+.eventos-page .eventos-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.eventos-page button {
+  margin: 0 0.3rem;
+  background: #00aaff;
+  border: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #fff;
+  font: inherit;
+}
+
+.eventos-page .eventos-toolbar button {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+}
+
+.eventos-page button:hover {
+  filter: brightness(1.08);
+}
+
+/* En fila de tabla: el último botón (Borrar) como en CRA */
+.eventos-page .eventos-table td button:last-child {
+  background: #ff4b4b;
+}
+
+.eventos-page .eventos-table-wrap {
+  overflow-x: auto;
+}
+
+.eventos-page .eventos-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.eventos-page .eventos-table th,
+.eventos-page .eventos-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #444;
+}
+
+.eventos-page .eventos-table th {
+  color: #00aaff;
+}
+
+.eventos-page .eventos-modal-backdrop.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(30, 30, 30, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 80;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.eventos-page .eventos-modal.modal-content {
+  background: #2a2a2a;
+  padding: 1rem;
+  border-radius: 8px;
+  width: min(300px, 100%);
+  box-sizing: border-box;
+  border: none;
+}
+
+.eventos-page .eventos-modal.modal-content h3 {
+  margin-top: 0;
+  color: #00aaff;
+}
+
+.eventos-page .eventos-modal.modal-content .eventos-field {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.eventos-page .eventos-modal.modal-content .eventos-field input,
+.eventos-page .eventos-modal.modal-content .eventos-field select {
+  width: 100%;
+  padding: 0.3rem;
+  margin-top: 0.2rem;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #1e1e1e;
+  color: #fff;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.eventos-page .eventos-modal-actions.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* CRA: último botón del bloque de acciones (Cancelar) en rojo */
+.eventos-page .eventos-modal-actions button:last-child {
+  background: #ff4b4b;
+}

@@ -1,0 +1,6 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Generar .m3u para Liquidsoap cada hora (mismo horario que el CRA `0 * * * *`).
+0 * * * * root cd /app/apps/api && /usr/local/bin/node dist/cron/run-liquidsoap-m3u-once.js >>/proc/1/fd/1 2>>/proc/1/fd/2
+

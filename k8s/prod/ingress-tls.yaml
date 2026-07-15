@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radioflow-api
+  namespace: radioflow
+  annotations:
+    # Ajusta a tu issuer real (ej. letsencrypt-prod)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - radioflow.example.com
+      secretName: radioflow-api-tls
+  rules:
+    - host: radioflow.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 4000
+

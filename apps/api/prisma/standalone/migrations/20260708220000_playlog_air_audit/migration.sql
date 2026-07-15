@@ -1,0 +1,1 @@
+-- SQLite: PlayAction es texto; nuevos valores TRACK_PLAYED y AUTOMATION se aceptan sin migración de esquema.

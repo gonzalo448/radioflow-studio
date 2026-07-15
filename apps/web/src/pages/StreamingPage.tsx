@@ -18,6 +18,7 @@ type Target = {
 export function StreamingPage() {
   const { token, user } = useAuth();
   const [targets, setTargets] = useState<Target[]>([]);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [name, setName] = useState("Icecast principal");
@@ -27,10 +28,29 @@ export function StreamingPage() {
   const [mountPath, setMountPath] = useState("/stream");
   const [sourcePassword, setSourcePassword] = useState("");
 
-  const load = useCallback(async () => {
-    const data = await apiFetch<Target[]>("/api/streaming/targets");
-    setTargets(data);
+  const [activeEncoderId, setActiveEncoderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings")
+      .then((st) => setActiveEncoderId(st.activeStreamingTargetId ?? null))
+      .catch(() => setActiveEncoderId(null));
   }, []);
+
+  const load = useCallback(async () => {
+    if (!token) {
+      setTargets([]);
+      setLoadErr(null);
+      return;
+    }
+    try {
+      const data = await apiFetch<Target[]>("/api/streaming/targets", { token });
+      setTargets(data);
+      setLoadErr(null);
+    } catch (e) {
+      setTargets([]);
+      setLoadErr(e instanceof Error ? e.message : "Error");
+    }
+  }, [token]);
 
   useEffect(() => {
     void load();
@@ -60,6 +80,8 @@ export function StreamingPage() {
       setMsg(null);
       setSourcePassword("");
       await load();
+      const st = await apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings");
+      setActiveEncoderId(st.activeStreamingTargetId ?? null);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -70,6 +92,8 @@ export function StreamingPage() {
     try {
       await apiFetch(`/api/streaming/targets/${id}`, { method: "DELETE", token });
       await load();
+      const st = await apiFetch<{ activeStreamingTargetId?: string | null }>("/api/settings");
+      setActiveEncoderId(st.activeStreamingTargetId ?? null);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -79,13 +103,16 @@ export function StreamingPage() {
     <section className="card">
       <h1>Destinos de streaming</h1>
       <p className="muted">
-        Metadatos para Icecast, Shoutcast o AzuraCast. Las contraseñas de fuente no se muestran en el panel; solo el indicador hasSourcePassword.
+        Metadatos para Icecast, Shoutcast o AzuraCast. Las contraseñas de fuente no se muestran en el panel; solo el
+        indicador hasSourcePassword. Ver destinos requiere sesión.
       </p>
+      {!token && <p className="badge">Inicia sesión para listar destinos.</p>}
       {user && (
         <p className="badge">
           Rol: <code>{user.role}</code>
         </p>
       )}
+      {loadErr && <p className="error">{loadErr}</p>}
       {msg && <p className="error">{msg}</p>}
       <form className="form inline-grid" onSubmit={onCreate}>
         <label>
@@ -131,6 +158,11 @@ export function StreamingPage() {
           <li key={t.id}>
             <div>
               <strong>{t.name}</strong>{" "}
+              {activeEncoderId === t.id && (
+                <span className="badge" style={{ marginLeft: "0.35rem" }}>
+                  Salida encoder
+                </span>
+              )}{" "}
               <span className="muted">
                 {t.protocol}://{t.host}:{t.port}
                 {t.mountPath} · TLS: {t.tls ? "sí" : "no"} · clave: {t.hasSourcePassword ? "definida" : "no"}

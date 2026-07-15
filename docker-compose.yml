@@ -1,10 +1,11 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: radioflow
-      POSTGRES_PASSWORD: radioflow_dev
+      # Debe coincidir con la contraseña del volumen `radioflow_pg` (la del primer arranque).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radioflow_dev}
       POSTGRES_DB: radioflow
     ports:
       - "5432:5432"
@@ -17,12 +18,93 @@ services:
       retries: 5
 
   redis:
+    # Rate-limit compartido en login/registro (REDIS_URL en el servicio api). Sin URL, la API usa memoria por proceso.
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - radioflow_redis:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://radioflow:${POSTGRES_PASSWORD:-radioflow_dev}@postgres:5432/radioflow
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-cambiar-minimo-32-caracteres-radioflow}
+      CORS_ORIGIN: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173
+      MEDIA_ROOT: /app/media
+      REDIS_URL: redis://redis:6379
+      # Con profile `workers` para parrilla: API_BACKGROUND_MODE=maintenance +
+      # SCHEDULE_APPLY_MODE=worker + SCHEDULE_WORKER_EXPECTED=1 + INTERNAL_SCHEDULE_POLL_MS=0
+      # Todo-en-uno (desktop/dev): full + INTERNAL_SCHEDULE_POLL_MS>0 + SCHEDULE_APPLY_MODE=auto
+      API_BACKGROUND_MODE: ${API_BACKGROUND_MODE:-full}
+      INTERNAL_SCHEDULE_POLL_MS: ${INTERNAL_SCHEDULE_POLL_MS:-0}
+      SCHEDULE_APPLY_MODE: ${SCHEDULE_APPLY_MODE:-auto}
+      SCHEDULE_WORKER_EXPECTED: ${SCHEDULE_WORKER_EXPECTED:-0}
+      # Liquidsoap M3U in-process: off por defecto (A2). Encoder→Icecast es el path al aire.
+      LIQUIDSOAP_M3U_POLL_MS: ${LIQUIDSOAP_M3U_POLL_MS:-0}
+    volumes:
+      # Carpeta en el host: el encoder local (npm run dev:encoder) lee los mismos uploads que la API.
+      - ./apps/api/data/media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/apps/api && npx prisma migrate deploy && node dist/index.js",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  # node-cron en proceso Node (sin cron del SO). Perfil: `liquidsoap-cron`.
+  #   docker compose --profile liquidsoap-cron up -d liquidsoap-playlist-cron
+  liquidsoap-playlist-cron:
+    profiles: ["liquidsoap-cron"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /app/apps/api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://radioflow:${POSTGRES_PASSWORD:-radioflow_dev}@postgres:5432/radioflow
+      JWT_SECRET: ${JWT_SECRET:-desarrollo-cambiar-minimo-32-caracteres-radioflow}
+      CORS_ORIGIN: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173
+      MEDIA_ROOT: /app/media
+      REDIS_URL: redis://redis:6379
+      LIQUIDSOAP_PLAYLIST_DIR: /app/playlists
+      LIQUIDSOAP_CRON_SCHEDULE: "*/2 * * * *"
+      LIQUIDSOAP_CRON_RUN_ON_START: "1"
+    volumes:
+      - radioflow_media:/app/media
+      - radioflow_liquidsoap_pls:/app/playlists
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["node", "dist/cron/liquidsoap-m3u-daemon.js"]
 
   # Ollama para curaduría semántica local (Fase 6). Descomenta cuando lo necesites.
   # ollama:
@@ -32,6 +114,128 @@ services:
   #   volumes:
   #     - ollama_data:/root/.ollama
 
+  # Icecast 2 de prueba (encoder → icecast://source:PASS@127.0.0.1:<PUERTO_HOST>/stream).
+  # Puerto en el host: RADIOFLOW_ICECAST_PUBLISH_PORT (default 8000). Si 8000 está ocupado, p. ej. 8840 en .env raíz.
+  icecast:
+    profiles: ["broadcast"]
+    image: infiniteproject/icecast:latest
+    restart: unless-stopped
+    ports:
+      - "${RADIOFLOW_ICECAST_PUBLISH_PORT:-8000}:8000"
+    # Usar RADIOFLOW_ICECAST_* para interpolación: evita que variables globales ICECAST_*
+    # del sistema (p. ej. ICECAST_SOURCE_PASSWORD=a) pisen el default del repo.
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${RADIOFLOW_ICECAST_SOURCE_PASSWORD:-radioflow_dev}
+      ICECAST_ADMIN_PASSWORD: ${RADIOFLOW_ICECAST_ADMIN_PASSWORD:-radioflow_admin_dev}
+      ICECAST_RELAY_PASSWORD: ${RADIOFLOW_ICECAST_RELAY_PASSWORD:-radioflow_relay_dev}
+
+  # Tono de prueba → mount /stream (misma red que `icecast`). Paralo si publicás con el encoder al mismo mount.
+  icecast-hold:
+    profiles: ["broadcast"]
+    build:
+      context: ./docker/icecast-hold
+    restart: unless-stopped
+    depends_on:
+      icecast:
+        condition: service_started
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${RADIOFLOW_ICECAST_SOURCE_PASSWORD:-radioflow_dev}
+
+  # Encoder real (API/WS + FFmpeg). Misma red que Icecast; no uses a la vez icecast-hold en /stream.
+  encoder:
+    profiles: ["broadcast"]
+    build:
+      context: .
+      dockerfile: docker/encoder/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      icecast:
+        condition: service_started
+    volumes:
+      - ./apps/api/data/media:/media
+    environment:
+      RADIOFLOW_API_URL: http://api:4000
+      RADIOFLOW_MEDIA_ROOT: /media
+      RADIOFLOW_ICECAST_URL: icecast://source:${RADIOFLOW_ICECAST_SOURCE_PASSWORD:-radioflow_dev}@icecast:8000/stream
+      RADIOFLOW_ICECAST_METADATA: "1"
+      RADIOFLOW_ICECAST_ADMIN_USER: admin
+      RADIOFLOW_ICECAST_ADMIN_PASSWORD: ${RADIOFLOW_ICECAST_ADMIN_PASSWORD:-radioflow_admin_dev}
+      # JWT (rol dj+): metadatos en Icecast + heartbeat → panel Emisión al aire (opcional; también en .env raíz).
+      RADIOFLOW_TOKEN: ${RADIOFLOW_TOKEN:-}
+      ENABLE_FFMPEG: "1"
+      RADIOFLOW_USE_WS: "1"
+
+  # Liquidsoap LEGACY (opt-in). Path por defecto al aire = servicio `encoder` → Icecast `/stream`.
+  #   docker compose --profile broadcast --profile liquidsoap --profile liquidsoap-cron up -d
+  liquidsoap:
+    profiles: ["liquidsoap"]
+    image: savonet/liquidsoap:v2.2.5
+    restart: unless-stopped
+    environment:
+      ICECAST_HOST: icecast
+      ICECAST_PORT: "8000"
+      ICECAST_SOURCE_PASSWORD: ${RADIOFLOW_ICECAST_SOURCE_PASSWORD:-radioflow_dev}
+      LIQUIDSOAP_MOUNT: liquidsoap.ogg
+    volumes:
+      - ./docker/liquidsoap:/scripts:ro
+      - radioflow_liquidsoap_pls:/playlists:ro
+      - radioflow_media:/media:ro
+    command: ["liquidsoap", "/scripts/radio.playout.liq"]
+    depends_on:
+      icecast:
+        condition: service_started
+
+  # Perfil opcional: worker de parrilla — C3: la API debe NO aplicar bloques en paralelo.
+  # Recomendado en el servicio `api` (mismo .env / override):
+  #   API_BACKGROUND_MODE=maintenance
+  #   SCHEDULE_APPLY_MODE=worker
+  #   SCHEDULE_WORKER_EXPECTED=1
+  #   INTERNAL_SCHEDULE_POLL_MS=0
+  schedule-worker:
+    profiles: ["workers"]
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      # Con el servicio `api` en este mismo compose, usa http://api:4000
+      RADIOFLOW_API_URL: ${RADIOFLOW_API_URL:-http://api:4000}
+      RADIOFLOW_TOKEN: ${RADIOFLOW_TOKEN:-}
+      SCHEDULE_POLL_MS: "20000"
+    command: ["sh", "-c", "npm install && npm run start -w @radioflow/schedule-worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Worker cola Process tracks (Fase 2 manual RadioBOSS): loudness, BPM, trim, transcode.
+  library-process-worker:
+    profiles: ["workers"]
+    image: node:22-alpine
+    working_dir: /app/apps/api
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://radioflow:${POSTGRES_PASSWORD:-radioflow_dev}@postgres:5432/radioflow
+      MEDIA_ROOT: data/media
+      AUDIO_FFMPEG_ENABLED: "1"
+      AUDIO_FFPROBE_ENABLED: "1"
+      LIBRARY_PROCESS_WORKER_POLL_MS: ${LIBRARY_PROCESS_WORKER_POLL_MS:-2500}
+    command:
+      [
+        "sh",
+        "-c",
+        "apk add --no-cache ffmpeg > /dev/null 2>&1 && cd /app && npm install && npx tsx src/workers/library-process-worker.ts",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   radioflow_pg:
   radioflow_redis:
+  radioflow_media:
+  radioflow_liquidsoap_pls:

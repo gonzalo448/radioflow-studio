@@ -1,0 +1,22 @@
+# Nginx como borde TLS/HTTP del stack de producción (docker-compose.prod.yml).
+# Requiere `apps/web/dist` (build CI o local).
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.edge.prod.yml --profile edge up -d
+#
+# Ajustá CORS_ORIGIN en la API al origen público (p. ej. https://radio.tudominio.com).
+
+services:
+  nginx:
+    profiles: ["edge"]
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${RADIOFLOW_WEB_DIST:-./apps/web/dist}:/usr/share/nginx/html:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - radioflow_internal

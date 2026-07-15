@@ -1,0 +1,1 @@
+-- SQLite: kind is TEXT; new value needs no schema change.
