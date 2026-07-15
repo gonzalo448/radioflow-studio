@@ -11,7 +11,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: radioflow
           POSTGRES_PASSWORD: radioflow_dev
@@ -31,6 +31,8 @@ jobs:
       NODE_ENV: test
       MEDIA_ROOT: data/media/ci
       SMOKE_PROMOTE_TO_EDITOR: "1"
+      RATE_LIMIT_AUTH_MAX: "8"
+      RATE_LIMIT_AUTH_WINDOW_SEC: "300"
 
     steps:
       - uses: actions/checkout@v4
@@ -43,12 +45,34 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: npm audit (0 critical)
+        run: node scripts/ci-verify-npm-audit.mjs
+
+      - name: Check UTF-8
+        run: npm run check:utf8
+
+      - name: Verify JWT secret policy (prod)
+        run: node scripts/ci-verify-jwt-secret.mjs
+        env:
+          NODE_ENV: production
+          JWT_SECRET: ci-smoke-jwt-secret-32-chars-minimum-x
+
+      - name: Verify weak JWT fails in prod
+        run: |
+          set +e
+          NODE_ENV=production JWT_SECRET=short node scripts/ci-verify-jwt-secret.mjs
+          test $? -ne 0
+
       - name: Build shared
         run: npm run build -w @radioflow/shared
 
-      - name: Generate Prisma client
+      - name: Generate Prisma clients
         working-directory: apps/api
-        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://radioflow:radioflow_dev@localhost:5432/radioflow
+        run: |
+          npx prisma generate
+          DATABASE_URL="file:./.ci-standalone-generate.db" npx prisma generate --schema=prisma/standalone/schema.prisma
 
       - name: Typecheck & build API
         run: npm run build -w @radioflow/api
@@ -56,37 +80,65 @@ jobs:
       - name: Build web
         run: npm run build -w @radioflow/web
 
-      - name: Migrate DB & smoke API
+      - name: Unit tests (B4 skip / AutoDJ / EOF)
+        run: npm run test:unit
+
+      - name: Migrate DB, verify schema, smoke API y E2E (Playwright)
         run: |
-          set -e
+          set -euo pipefail
+          set -m
           cd apps/api
           npx prisma migrate deploy
-          node dist/index.js &
+          node scripts/ci-verify-migrate.mjs
+          cd ../..
+          ( cd apps/api && node dist/index.js ) &
           API_PID=$!
-          trap 'kill $API_PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 45); do
+          ( cd apps/web && cross-env VITE_ALLOW_WEB_PANEL=true npx vite --host 127.0.0.1 --port 5173 --strictPort ) &
+          WEB_PID=$!
+          cleanup() {
+            kill -TERM -"$WEB_PID" 2>/dev/null || true
+            kill -TERM -"$API_PID" 2>/dev/null || true
+            wait "$WEB_PID" 2>/dev/null || true
+            wait "$API_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:4000/api/health/ready >/dev/null; then
               break
             fi
-            if [ "$i" -eq 45 ]; then
+            if [ "$i" -eq 60 ]; then
               echo "API no respondió a /api/health/ready a tiempo"
               exit 1
             fi
             sleep 1
           done
-          cd ../..
-          node scripts/smoke-api.mjs
+          npx wait-on -t 120000 tcp:127.0.0.1:5173
+          SMOKE_RATE_LIMIT_PROBE=1 SMOKE_EXPECT_AUTH_MAX=8 node scripts/smoke-api.mjs
+          npx playwright install chromium --with-deps
+          CI=true npm run test:e2e
 
-  # Sin FFmpeg: solo comprueba que Icecast levanta y el puerto 8000 responde HTTP.
-  icecast-reachable:
+  # A5: FFmpeg → Icecast (bytes en /stream) + mock PlaySegment filters.
+  smoke-broadcast:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Smoke broadcast (mock, sin Icecast)
+        run: npm run smoke:broadcast:mock
+
       - name: Start Icecast (perfil broadcast)
         run: docker compose --profile broadcast up -d icecast
 
-      - name: Esperar respuesta HTTP en :8000
+      - name: Esperar Icecast :8000
         run: |
           set -e
           for i in $(seq 1 40); do
@@ -99,6 +151,28 @@ jobs:
           echo "Icecast no respondió a tiempo"
           exit 1
 
+      - name: Smoke broadcast (FFmpeg → Icecast /stream)
+        env:
+          SMOKE_BROADCAST_MODE: icecast
+          SMOKE_ICECAST_HOST: 127.0.0.1
+          SMOKE_ICECAST_PORT: "8000"
+          SMOKE_ICECAST_PASSWORD: radioflow_dev
+          SMOKE_ICECAST_MOUNT: /stream
+        run: npm run smoke:broadcast
+
       - name: Detener Icecast
         if: always()
-        run: docker compose down
+        run: docker compose --profile broadcast down
+
+  # A6: integridad backup desktop (manifiesto SHA-256 + HMAC) sin tocar userData real.
+  backup-desktop-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Desktop backup/restore selftest
+        run: npm run backup:desktop:selftest

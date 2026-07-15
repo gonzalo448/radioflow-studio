@@ -1,0 +1,20 @@
+# Reverse proxy Nginx frente al stack de desarrollo (docker-compose.yml).
+# Requiere build de la PWA: npm run build -w @radioflow/web
+#
+#   docker compose -f docker-compose.yml -f docker-compose.edge.dev.yml --profile edge up -d
+#
+# Panel: http://localhost/  ·  API sigue en http://localhost/api/... vía proxy
+
+services:
+  nginx:
+    profiles: ["edge"]
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${RADIOFLOW_WEB_DIST:-./apps/web/dist}:/usr/share/nginx/html:ro
+    depends_on:
+      api:
+        condition: service_healthy

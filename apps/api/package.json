@@ -1,34 +1,51 @@
 {
   "name": "@radioflow/api",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npm run db:generate && tsc && node ../../scripts/copy-api-prisma-generated.mjs",
     "start": "node dist/index.js",
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate && prisma generate --schema=prisma/standalone/schema.prisma",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "liquidsoap:gen-m3u": "tsx src/cron/run-liquidsoap-m3u-once.ts",
+    "liquidsoap:cron": "tsx src/cron/liquidsoap-m3u-daemon.ts",
+    "pgvector:backfill": "node scripts/pgvector-backfill-from-ref.mjs",
+    "liquidsoap:cron:prod": "node dist/cron/liquidsoap-m3u-daemon.js",
+    "library-process-worker": "tsx src/workers/library-process-worker.ts",
+    "library-process-worker:prod": "node dist/workers/library-process-worker.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.0",
     "@fastify/multipart": "^10.0.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.6",
     "@fastify/websocket": "^11.2.0",
-    "@prisma/client": "^6.3.1",
+    "@prisma/client": "^6.19.3",
     "@radioflow/shared": "*",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
-    "prisma": "^6.3.1",
+    "music-metadata": "^11.12.3",
+    "node-cron": "^3.0.3",
+    "node-id3": "^0.2.9",
+    "prisma": "^6.19.3",
+    "redis": "^4.7.0",
     "sanitize-filename": "^1.6.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.10.7",
+    "@types/node-cron": "^3.0.11",
     "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
   }
 }

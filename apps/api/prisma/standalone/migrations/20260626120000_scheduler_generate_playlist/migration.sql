@@ -1,0 +1,1 @@
+-- SQLite standalone: enum values are unchecked strings in Prisma

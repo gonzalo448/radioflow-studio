@@ -1,14 +1,32 @@
 node_modules
 dist
+dist-pack
 build
 .env
 .env.local
+backups/
 *.log
+logs/soak/*
+!logs/soak/.gitkeep
 .DS_Store
 coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 .turbo
 .vscode/*
 !.vscode/extensions.json
 
 **/data/media/*
 !apps/api/data/media/.gitkeep
+
+apps/desktop/.embedded-api/
+apps/api/src/generated/
+apps/api/.data/
+apps/api/tmp-standalone-test.db
+apps/api/prisma/standalone/tmp*.db
+
+# Salida local: `npm run liquidsoap:gen-m3u -w @radioflow/api`
+# Certificados TLS locales (Nginx borde); ver docker/nginx/tls/README.md
+docker/nginx/tls/*.pem

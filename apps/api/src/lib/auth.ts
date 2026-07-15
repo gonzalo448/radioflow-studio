@@ -1,7 +1,16 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
-import jwt from "jsonwebtoken";
 import type { Role } from "@prisma/client";
 import type { Env } from "../config.js";
+import {
+  roleSatisfies,
+  ROLES_LIBRARY_WRITE,
+  ROLES_PROGRAMACION_DELETE,
+  ROLES_REPORTS_READ,
+  ROLES_SCHEDULE_WRITE,
+  ROLES_STATION_WRITE,
+  ROLES_STREAMING_WRITE,
+} from "@radioflow/shared";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import jwt from "jsonwebtoken";
 import { prisma } from "../db.js";
 
 declare module "fastify" {
@@ -37,21 +46,60 @@ export function requireUser(request: FastifyRequest, reply: FastifyReply): boole
   return true;
 }
 
+function embeddedFullAccess(): boolean {
+  const v = process.env.EMBEDDED_STANDALONE;
+  return v === "1" || v === "true";
+}
+
 export function requireRoles(
   request: FastifyRequest,
   reply: FastifyReply,
   allowed: Role[],
 ): boolean {
   if (!requireUser(request, reply)) return false;
-  if (!request.userRole || !allowed.includes(request.userRole)) {
+  if (embeddedFullAccess()) return true;
+  if (!roleSatisfies(request.userRole, allowed)) {
     void reply.status(403).send({ error: "Permisos insuficientes" });
     return false;
   }
   return true;
 }
 
-export const ROLES_STATION_WRITE: Role[] = ["admin", "editor", "dj"];
-export const ROLES_SCHEDULE_WRITE: Role[] = ["admin", "editor"];
-export const ROLES_STREAMING_WRITE: Role[] = ["admin", "editor"];
-export const ROLES_LIBRARY_WRITE: Role[] = ["admin", "editor", "dj"];
-export const ROLES_REPORTS_READ: Role[] = ["admin", "editor"];
+/**
+ * Equivalente a Express `checkRole(roles)` con `req.user` ya cargado:
+ * - sin usuario → 401 `{ error: "No autenticado" }`
+ * - rol fuera de la lista → 403 `{ error: "Acceso denegado" }` (tu `usuario.rol` ↔ `request.userRole`).
+ *
+ * Usar en `preHandler` **después** de `optionalAuth` para tener `userId` y `userRole`.
+ *
+ * @example
+ * ```ts
+ * preHandler: async (req, reply) => {
+ *   await optionalAuth(req, env);
+ *   await checkRole(["admin", "editor"])(req, reply);
+ * },
+ * ```
+ */
+export function checkRole(allowed: Role[]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (!request.userId) {
+      void reply.status(401).send({ error: "No autenticado" });
+      return;
+    }
+    if (embeddedFullAccess()) return;
+    if (!roleSatisfies(request.userRole, allowed)) {
+      void reply.status(403).send({ error: "Acceso denegado" });
+      return;
+    }
+  };
+}
+
+export {
+  ROLES_STATION_WRITE,
+  ROLES_SCHEDULE_WRITE,
+  ROLES_PROGRAMACION_DELETE,
+  ROLES_STREAMING_WRITE,
+  ROLES_LIBRARY_WRITE,
+  ROLES_REPORTS_READ,
+} from "@radioflow/shared";
+export { roleSatisfies } from "@radioflow/shared";

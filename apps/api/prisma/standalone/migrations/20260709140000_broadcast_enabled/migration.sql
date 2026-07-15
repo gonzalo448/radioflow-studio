@@ -1,0 +1,1 @@
+ALTER TABLE "AppSettings" ADD COLUMN "broadcastEnabled" INTEGER NOT NULL DEFAULT 0;

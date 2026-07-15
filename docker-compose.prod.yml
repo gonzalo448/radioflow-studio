@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: radioflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: radioflow
+    volumes:
+      - radioflow_pg:/var/lib/postgresql/data
+    networks:
+      - radioflow_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radioflow -d radioflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - radioflow_redis:/data
+    networks:
+      - radioflow_internal
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://radioflow:${POSTGRES_PASSWORD}@postgres:5432/radioflow
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET en .env (mín 32 chars)}
+      # Define explícitamente el origen del panel. Para desactivar CORS: "none"
+      CORS_ORIGIN: ${CORS_ORIGIN:-none}
+      CORS_CREDENTIALS: ${CORS_CREDENTIALS:-true}
+      BODY_LIMIT_BYTES: ${BODY_LIMIT_BYTES:-1048576}
+      MEDIA_ROOT: /app/media
+      REDIS_URL: redis://redis:6379
+      BOOTSTRAP_LOCAL_ADMIN: "0"
+      API_BACKGROUND_MODE: ${API_BACKGROUND_MODE:-maintenance}
+      SHUTDOWN_GRACE_MS: ${SHUTDOWN_GRACE_MS:-2000}
+      # Limpieza de refresh tokens (ajustable)
+      REFRESH_TOKEN_CLEANUP_INTERVAL_MIN: ${REFRESH_TOKEN_CLEANUP_INTERVAL_MIN:-30}
+      REFRESH_TOKEN_REVOKED_RETENTION_DAYS: ${REFRESH_TOKEN_REVOKED_RETENTION_DAYS:-14}
+      REFRESH_TOKEN_EXPIRED_RETENTION_DAYS: ${REFRESH_TOKEN_EXPIRED_RETENTION_DAYS:-3}
+      REFRESH_TOKEN_CLEANUP_MAX_DELETE: ${REFRESH_TOKEN_CLEANUP_MAX_DELETE:-2000}
+    volumes:
+      - radioflow_media:/app/media
+    networks:
+      - radioflow_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command:
+      ["sh", "-c", "cd /app/apps/api && npx prisma migrate deploy && node dist/index.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  # Icecast opcional en prod (si lo usas, revisa passwords fuertes)
+  icecast:
+    profiles: ["broadcast"]
+    image: infiniteproject/icecast:latest
+    restart: unless-stopped
+    ports:
+      - "${ICECAST_PORT:-8000}:8000"
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:?define ICECAST_SOURCE_PASSWORD}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:?define ICECAST_ADMIN_PASSWORD}
+      ICECAST_RELAY_PASSWORD: ${ICECAST_RELAY_PASSWORD:?define ICECAST_RELAY_PASSWORD}
+    networks:
+      - radioflow_internal
+
+networks:
+  radioflow_internal:
+    driver: bridge
+
+volumes:
+  radioflow_pg:
+  radioflow_redis:
+  radioflow_media:
+

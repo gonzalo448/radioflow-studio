@@ -1,0 +1,57 @@
+name: Desktop pack
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "apps/desktop/**"
+      - "scripts/desktop-electron-pack.mjs"
+
+jobs:
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            artifact: "**/*.exe"
+          - os: macos-latest
+            script: dist:mac
+            artifact: "**/*.dmg"
+          - os: ubuntu-latest
+            script: dist:linux
+            artifact: "**/*.AppImage"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build web + API embed
+        run: |
+          npm run build -w @radioflow/shared
+          npm run build -w @radioflow/api
+          npm run build -w @radioflow/web
+          node scripts/ensure-electron-for-desktop.mjs
+
+      - name: Pack Electron (${{ matrix.script }})
+        run: npm run ${{ matrix.script }} -w @radioflow/desktop
+        env:
+          RADIOFLOW_SKIP_SIGNING: "1"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: apps/desktop/dist-pack/**/${{ matrix.artifact }}
+          if-no-files-found: warn

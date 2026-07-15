@@ -1,0 +1,28 @@
+{
+  "name": "RadioFlow Studio",
+  "short_name": "RadioFlow",
+  "description": "Escucha RadioFlow Studio en vivo",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "/#/radio",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/radio-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/radio-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

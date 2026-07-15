@@ -1,0 +1,129 @@
+/* Consola admin: barra superior + menú lateral (wireframe) */
+
+.admin-console {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: min(72dvh, 900px);
+}
+
+.admin-console-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #2a3544;
+  background: linear-gradient(145deg, #0f172a 0%, #0c121c 100%);
+}
+
+.admin-console-brand {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.admin-console-topmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.admin-console-role {
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.admin-console-body {
+  display: flex;
+  flex: 1;
+  gap: 1rem;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.admin-console-sidebar {
+  flex: 0 0 220px;
+  max-width: 100%;
+  padding: 0.65rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid #2a3544;
+  background: #0c1218;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.admin-console-nav-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 0.35rem 0.5rem 0.5rem;
+}
+
+.admin-console-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  color: #e2e8f0;
+  text-decoration: none;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+
+.admin-console-nav-link:hover {
+  background: #1e293b;
+  color: #fff;
+}
+
+.admin-console-nav-link.is-active {
+  background: #1d4ed833;
+  border-color: var(--accent, #38bdf8);
+  color: #f1f5f9;
+}
+
+.admin-console-nav-link--featured {
+  border-color: #f59e0b44;
+  background: #f59e0b0d;
+}
+
+.admin-console-nav-link--featured.is-active {
+  border-color: var(--accent, #38bdf8);
+  background: #1d4ed855;
+}
+
+.admin-console-nav-icon {
+  width: 1.35rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.admin-console-main {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .admin-console-body {
+    flex-direction: column;
+  }
+
+  .admin-console-sidebar {
+    flex: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin-console-nav-title {
+    width: 100%;
+  }
+}

@@ -1,11 +1,13 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 
 type Pl = { id: string; name: string; _count: { items: number } };
 
+/** Selector Abrir lista: la edición y el aire viven en Cabina. */
 export function PlaylistsPage() {
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [rows, setRows] = useState<Pl[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,10 +37,13 @@ export function PlaylistsPage() {
     e.preventDefault();
     if (!token || !name.trim()) return;
     try {
-      await apiFetch("/api/playlists", { method: "POST", token, body: JSON.stringify({ name: name.trim() }) });
-      setName("Nueva lista");
+      const pl = await apiFetch<{ id: string; name: string }>("/api/playlists", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ name: name.trim() }),
+      });
       setMsg(null);
-      void load();
+      navigate(`/station?pl=${encodeURIComponent(pl.id)}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Error");
     }
@@ -46,14 +51,17 @@ export function PlaylistsPage() {
 
   return (
     <section className="card">
-      <h1>Playlists</h1>
-      <p className="muted">Listas ordenadas para parrilla y para volcar a la cola al aire.</p>
+      <h1>Abrir lista</h1>
+      <p className="muted">
+        Elija una lista para trabajarla en{" "}
+        <Link to="/station">Cabina</Link> (Manual · Track List · Generador Pro · Reproducir).
+      </p>
       {loadErr && <p className="error">{loadErr}</p>}
       {canEdit && token && (
         <form className="row" onSubmit={onCreate}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" />
           <button type="submit" className="btn primary">
-            Crear playlist
+            Crear y abrir en Cabina
           </button>
         </form>
       )}
@@ -63,15 +71,18 @@ export function PlaylistsPage() {
         {rows.map((p) => (
           <li key={p.id}>
             <div>
-              <Link to={`/playlists/${p.id}`}>
+              <Link to={`/station?pl=${encodeURIComponent(p.id)}`}>
                 <strong>{p.name}</strong>
               </Link>
-              <div className="muted small">{p._count.items} pistas</div>
+              <div className="muted small">{p._count.items} ítem(s)</div>
             </div>
           </li>
         ))}
       </ul>
       {rows.length === 0 && !loading && <p className="muted">No hay listas todavía.</p>}
+      <p className="muted small mt">
+        <Link to="/station">Volver a Cabina</Link>
+      </p>
     </section>
   );
 }

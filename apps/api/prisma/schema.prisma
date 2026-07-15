@@ -12,6 +12,7 @@ enum Role {
   editor
   dj
   viewer
+  operador
 }
 
 enum StreamProtocol {
@@ -33,100 +34,369 @@ enum PlayAction {
   STATION_UPDATE
   PLAYLIST_QUEUE_SYNC
   LIBRARY_UPLOAD
+  TRACK_PLAYED
+  AUTOMATION
+}
+
+enum SchedulerActionType {
+  PLAY_PLAYLIST
+  PLAY_ASSET
+  RUN_COMMAND
+  GENERATE_AND_PLAY_PLAYLIST
+  PLAY_AD_BREAK
+  TIME_ANNOUNCE
+}
+
+enum SchedulerRunStatus {
+  success
+  error
+}
+
+enum QueueEntryKind {
+  track
+  pause
+  marker
+  note
+  voicetrack
+  track_list
+  hour_marker
+  dtmf
+  time_announce
+  station_intro
+  jingle_auto
+  cmd
+  container
+}
+
+enum LibraryProcessJobStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum SongRequestStatus {
+  pending
+  approved
+  rejected
+  played
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  displayName  String?
-  role         Role     @default(viewer)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  playLogs     PlayLog[]
+  id                    String              @id @default(cuid())
+  email                 String              @unique
+  passwordHash          String
+  displayName           String?
+  role                  Role                @default(viewer)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  playLogs              PlayLog[]
+  refreshTokens         RefreshToken[]
+  programacion          ProgramacionBlock[]
+  libraryProcessJobs    LibraryProcessJob[]
+  moderatedSongRequests SongRequest[]       @relation("SongRequestModerator")
+}
+
+model RefreshToken {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String        @unique
+  clientIp     String?       @db.VarChar(100)
+  createdAt    DateTime      @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?       @unique
+  replacedBy   RefreshToken? @relation("RefreshTokenRotation", fields: [replacedById], references: [id])
+  replacesId   String?       @unique
+  replaces     RefreshToken? @relation("RefreshTokenRotation")
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model AppSettings {
-  id                       String   @id @default("global")
-  stationName              String   @default("RadioFlow Studio")
-  tagline                  String?
-  primaryColor             String?  @default("#38bdf8")
-  logoUrl                  String?
-  activeStreamingTargetId  String?
-  updatedAt                DateTime @updatedAt
+  id                        String   @id @default("global")
+  stationName               String   @default("RadioFlow Studio")
+  tagline                   String?
+  primaryColor              String?  @default("#38bdf8")
+  logoUrl                   String?
+  activeStreamingTargetId   String?
+  /** JSON array de IDs de StreamingTarget adicionales (RB-135). */
+  extraStreamingTargetIds   String?
+  /** Texto RDS estático o plantilla ({title}, {artist}, {station}). */
+  rdsText                   String?
+  rdsEnabled                Boolean  @default(false)
+  /** Minutos mínimos entre pedidos con el mismo artista (0 = desactivado). */
+  songRequestArtistCooldownMin Int @default(0)
+  /** Minutos mínimos entre pedidos con el mismo título (0 = desactivado). */
+  songRequestTitleCooldownMin  Int @default(60)
+  /** Carpeta bajo uploads/ con intros por artista (RB-058). */
+  autoIntroFolder              String @default("intros")
+  /** JSON array de 5 etiquetas para campos personalizados de biblioteca. */
+  libraryCustomFieldLabels     String @default("[\"Personalizado 1\",\"Personalizado 2\",\"Personalizado 3\",\"Personalizado 4\",\"Personalizado 5\"]")
+  /** Carpeta bajo uploads/ para grabaciones de stream (P1-01). */
+  streamRecordingFolder        String @default("recordings")
+  /** Ruta absoluta Windows/Linux a la carpeta de locución horaria (archivos hr_/m_ estilo RadioBOSS). */
+  timeAnnounceFolderAbs        String?
+  /** 0 = off; 15 / 30 / 60 = cada N minutos en el reloj del PC. */
+  timeAnnounceIntervalMin      Int     @default(0)
+  /** Último slot anunciado (YYYY-MM-DDTHH:mm) para no repetir en el mismo intervalo. */
+  timeAnnounceLastSlotKey      String?
+  /** 0 = off; 15 / 30 / 60 = jingle automático cada N minutos (reloj del PC). */
+  jingleAutoIntervalMin        Int     @default(0)
+  /** 0 = off; >0 = jingle automático cada N canciones reproducibles. */
+  jingleAutoEveryTracks        Int     @default(0)
+  /** Página A/B/C del cart wall desde donde se eligen jingles automáticos. */
+  jingleAutoPageKey            String  @default("A")
+  /** Lista JSON de teclas habilitadas (ej. ["1","2","3"]). */
+  jingleAutoSlotKeysJson       String  @default("[\"1\"]")
+  /** Última tecla usada (anti repetición). */
+  jingleAutoLastSlotKey        String?
+  /** Último asset usado (anti repetición). */
+  jingleAutoLastAssetId        String?
+  /** Contador de canciones desde el último jingle automático. */
+  jingleAutoTracksSinceLast    Int     @default(0)
+  /** Último slot de reloj (YYYY-MM-DDTHH:mm) disparado por tiempo. */
+  jingleAutoLastTimeSlotKey    String?
+  /** 0 = off; si >0, evita repetir artista en las últimas N canciones al expandir track lists (AutoDJ). */
+  autoDjNoRepeatArtistLastN    Int     @default(0)
+  /** 0 = off; si >0, evita repetir el mismo tema (asset) en las últimas N canciones al expandir track lists (AutoDJ). */
+  autoDjNoRepeatTrackLastN     Int     @default(0)
+  /** 0 = off; si >0, el AutoDJ mantiene al menos N canciones futuras en cola. */
+  autoDjMinUpcomingTracks      Int     @default(0)
+  /** Ruta absoluta a archivo o carpeta con intro de emisora (station ID). */
+  stationIntroSourceAbs        String?
+  /** 0 = off; 15 / 30 / 60 = intro automática cada N minutos. */
+  stationIntroIntervalMin      Int     @default(0)
+  stationIntroLastSlotKey      String?
+  /** Failover: si el destino primario pierde fuente, cambiar al respaldo. */
+  streamingFailoverEnabled     Boolean  @default(false)
+  /** Destino Icecast de respaldo cuando falla el primario (legacy; usar cadena JSON). */
+  streamingFailoverBackupTargetId String?
+  /** Cadena ordenada de respaldos (JSON array de IDs, hasta 5). */
+  streamingFailoverBackupTargetIdsJson String?
+  /** -1 = en primario; 0+ = índice en la cadena de respaldo activa. */
+  streamingFailoverActiveBackupIndex Int @default(-1)
+  /** Primario guardado mientras se usa el respaldo (persiste entre reinicios). */
+  streamingFailoverPrimaryTargetId String?
+  /** Volver al primario cuando la fuente se recupere. */
+  streamingFailoverAutoRevert  Boolean  @default(true)
+  /** Emisión a Internet habilitada (estilo RadioBOSS «Emitir»). */
+  broadcastEnabled           Boolean  @default(false)
+  updatedAt                 DateTime @updatedAt
 }
 
 model MediaAsset {
-  id             String          @id @default(cuid())
-  title          String
-  artist         String?
-  album          String?
-  path           String
-  durationSec    Int?
-  mimeType       String?
-  embeddingRef   String?
-  semanticNote   String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  playlistItems  PlaylistItem[]
-  playQueueItems PlayQueueItem[]
-  playLogs       PlayLog[]
+  id                String         @id @default(cuid())
+  title             String
+  artist            String?
+  album             String?
+  genre             String?
+  path              String
+  coverPath         String?
+  durationSec       Int?
+  mimeType          String?
+  releaseYear       Int?
+  id3Comment        String?
+  audioBitrateKbps  Int?
+  audioSampleRateHz Int?
+  audioChannels     Int?
+  playbackGainDb    Float          @default(0)
+  /** Inicio útil (omitir silencio de cabeza); estilo RadioBOSS Start. */
+  cueStartSec       Float?
+  /** Fin útil (omitir silencio de cola); estilo RadioBOSS End. El mix arranca overlap antes. */
+  cueEndSec         Float?
+  embeddingRef      String?
+  semanticNote      String?
+  customField1      String?
+  customField2      String?
+  customField3      String?
+  customField4      String?
+  customField5      String?
+  /** Clave para emparejar auto-intro (ID3 `INTRO:` / TXXX INTRO_FOR o manual). */
+  introMatchKey     String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  playlistItems     PlaylistItem[]
+  playQueueItems    PlayQueueItem[]
+  playLogs          PlayLog[]
+  songRequests      SongRequest[]
+  jingleSlots       JingleSlot[]
+}
+
+model SchedulerEvent {
+  id         String              @id @default(cuid())
+  name       String
+  enabled    Boolean             @default(true)
+  actionType SchedulerActionType
+  runAt      DateTime?
+  nextRunAt  DateTime?
+  /** 0 = una sola vez; >0 = repetir cada N minutos (interval). */
+  repeatIntervalMin Int          @default(0)
+  payload    Json
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  runs       SchedulerRun[]
+
+  @@index([enabled, nextRunAt])
+}
+
+model SchedulerRun {
+  id         String             @id @default(cuid())
+  eventId    String
+  event      SchedulerEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  status     SchedulerRunStatus
+  startedAt  DateTime           @default(now())
+  finishedAt DateTime?
+  error      String?
+
+  @@index([eventId, startedAt])
 }
 
 model Playlist {
-  id             String          @id @default(cuid())
-  name           String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id               String               @id @default(cuid())
+  name             String
+  /** Color de pestaña en Cabina (hex #RRGGBB). */
+  tabColor         String?
+  /** Reinicio del ciclo «ya sonó» para rotación visual / informes. */
+  rotationResetAt  DateTime             @default(now())
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
   items          PlaylistItem[]
   scheduleBlocks ScheduleBlock[]
+  programacion   ProgramacionBlock[]
 }
 
 model PlaylistItem {
-  id         String   @id @default(cuid())
-  playlistId String
-  assetId    String
-  position   Int
-  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  asset      MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  id             String         @id @default(cuid())
+  playlistId     String
+  kind           QueueEntryKind @default(track)
+  assetId        String?
+  label          String?
+  pauseSec       Int?
+  trackListSpec  Json?
+  position       Int
+  playlist   Playlist       @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  asset      MediaAsset?      @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@unique([playlistId, position])
 }
 
 model Station {
-  id                           String           @id
-  mode                         StationMode      @default(AUTO)
-  currentPosition              Int              @default(0)
-  liveTitle                    String?
-  autoScheduleEnabled          Boolean          @default(false)
-  lastAppliedScheduleBlockId   String?
-  updatedAt                    DateTime         @updatedAt
-  queue                        PlayQueueItem[]
+  id                         String               @id
+  mode                       StationMode          @default(AUTO)
+  currentPosition            Int                  @default(0)
+  liveTitle                  String?
+  autoScheduleEnabled        Boolean              @default(false)
+  lastAppliedScheduleBlockId String?
+  /** Playlist activa para AutoDJ refill (se setea al sincronizar un bloque/playlist). */
+  autoDjActivePlaylistId     String?
+  /** Cursor de ítems dentro de la playlist activa (cíclico). */
+  autoDjPlaylistCursor       Int                  @default(0)
+  cabCrossfadeSec            Float                @default(4)
+  cabReferenceGainDb         Float                @default(0)
+  cabWebAudioEngine          Boolean              @default(true)
+  /** JSON: mapa dígito DTMF → acción (RB-118). */
+  dtmfActionsJson            String?
+  updatedAt                  DateTime             @updatedAt
+  queue                      PlayQueueItem[]
+  playbackQueue              PlaybackQueueEntry[]
+}
+
+model PlaybackQueueEntry {
+  id              String        @id @default(cuid())
+  stationId       String        @default("main")
+  playQueueItemId String        @unique
+  sortIndex       Int
+  station         Station       @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  queueItem       PlayQueueItem @relation(fields: [playQueueItemId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([stationId, sortIndex])
 }
 
 model PlayQueueItem {
-  id        String     @id @default(cuid())
-  stationId String     @default("main")
-  station   Station    @relation(fields: [stationId], references: [id], onDelete: Cascade)
-  position  Int
-  assetId   String
-  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt DateTime   @default(now())
+  id                 String              @id @default(cuid())
+  stationId          String              @default("main")
+  station            Station             @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  kind               QueueEntryKind      @default(track)
+  position           Int
+  assetId            String?
+  label              String?
+  pauseSec           Int?
+  asset              MediaAsset?         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  playbackQueueEntry PlaybackQueueEntry?
 
   @@unique([stationId, position])
+  @@index([stationId, assetId])
+}
+
+model AdSchedulerConfig {
+  id               String    @id @default("main")
+  enabled          Boolean   @default(false)
+  pathPrefix       String    @default("publicidad/")
+  intervalMinutes  Int       @default(15)
+  spotsPerBreak    Int       @default(2)
+  maxSpotsPerHour  Int       @default(8)
+  minGapMinutes    Int       @default(5)
+  rotationMode     String    @default("random")
+  lastBreakAt      DateTime?
+  sequentialCursor Int       @default(0)
+  hourWindowStart  DateTime?
+  spotsThisHour    Int       @default(0)
+  updatedAt        DateTime  @updatedAt
+}
+
+model AdBreakLog {
+  id        String   @id @default(cuid())
+  stationId String   @default("main")
+  assetIds  Json
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([stationId, createdAt])
 }
 
 model ScheduleBlock {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   label       String
   dayOfWeek   Int
   startMinute Int
   endMinute   Int
   playlistId  String?
-  playlist    Playlist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
-  priority    Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  playlist    Playlist?  @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  priority    Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model ProgramacionBlock {
+  id         Int        @id @default(autoincrement())
+  dia        String
+  hora       DateTime   @db.Time(6)
+  duracion   Int
+  playlistId String?    @map("playlist_id")
+  playlist   Playlist?  @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  usuarioId  String?    @map("usuario_id")
+  user       User?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  creado     DateTime   @default(now())
+
+  @@map("programacion")
+}
+
+model Evento {
+  id          Int     @id @default(autoincrement())
+  dia         String  @db.VarChar(20)
+  hora        String  @db.VarChar(5)
+  rutaAudio   String  @map("ruta_audio")
+  descripcion String?
+
+  @@map("eventos")
 }
 
 model StreamingTarget {
@@ -145,14 +415,81 @@ model StreamingTarget {
   updatedAt      DateTime       @updatedAt
 }
 
-model PlayLog {
+model LibraryProcessJob {
+  id              String                  @id @default(cuid())
+  kind            String
+  status          LibraryProcessJobStatus @default(pending)
+  payload         Json
+  result          Json?
+  error           String?
+  progressCurrent Int                     @default(0)
+  progressTotal   Int                     @default(0)
+  createdByUserId String?
+  createdBy       User?                   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  @@index([status, createdAt])
+}
+
+model JingleSlot {
   id        String     @id @default(cuid())
   stationId String     @default("main")
+  pageKey   String     @default("A")
+  slotKey   String
+  assetId   String
+  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  label     String?
+  updatedAt DateTime   @updatedAt
+
+  @@unique([stationId, pageKey, slotKey])
+  @@index([stationId])
+}
+
+model SongRequest {
+  id               String            @id @default(cuid())
+  listenerName     String?
+  listenerContact  String?
+  title            String
+  artist           String?
+  message          String?
+  status           SongRequestStatus @default(pending)
+  assetId          String?
+  asset            MediaAsset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedBy       User?             @relation("SongRequestModerator", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  enqueuedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model PlayLog {
+  id        String      @id @default(cuid())
+  stationId String      @default("main")
   action    PlayAction
   assetId   String?
   asset     MediaAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
   details   Json?
   userId    String?
-  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt DateTime   @default(now())
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
 }
+
+/** Muestreo periódico de oyentes Icecast (RB-133). */
+model ListenerSample {
+  id                String   @id @default(cuid())
+  recordedAt        DateTime @default(now())
+  listeners         Int?
+  streamTitle       String?
+  sourceConnected   Boolean?
+  streamingTargetId String?
+  targetName        String?
+
+  @@index([recordedAt])
+}
+
+

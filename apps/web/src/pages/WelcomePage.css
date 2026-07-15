@@ -1,0 +1,109 @@
+.welcome-page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 1rem 2rem;
+  overflow: hidden;
+  color: #fff;
+}
+
+.welcome-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(255, 120, 180, 0.55), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 85% 15%, rgba(120, 200, 255, 0.5), transparent 50%),
+    radial-gradient(ellipse 75% 65% at 50% 100%, rgba(255, 200, 120, 0.45), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 70% 55%, rgba(180, 140, 255, 0.35), transparent 50%),
+    linear-gradient(160deg, #c8e8ff 0%, #f5c4e8 35%, #ffe8b8 70%, #ffd4a8 100%);
+}
+
+.welcome-shell {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.welcome-hero {
+  margin: 0;
+  width: min(480px, 96vw);
+  line-height: 0;
+}
+
+.welcome-hero-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 16px 32px rgba(60, 30, 90, 0.22));
+  user-select: none;
+  pointer-events: none;
+}
+
+.welcome-actions {
+  margin-top: 1.5rem;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.welcome-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 12rem;
+  padding: 0.75rem 2.25rem;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #1a1030;
+  background: linear-gradient(180deg, #ffffff 0%, #ffe08a 100%);
+  box-shadow:
+    0 4px 0 rgba(120, 70, 0, 0.25),
+    0 8px 24px rgba(80, 40, 120, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.welcome-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 5px 0 rgba(120, 70, 0, 0.22),
+    0 12px 28px rgba(80, 40, 120, 0.4);
+}
+
+.welcome-cta:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 rgba(120, 70, 0, 0.25),
+    0 4px 14px rgba(80, 40, 120, 0.3);
+}
+
+.welcome-foot {
+  margin: 1rem 0 0;
+  max-width: 20rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 8px rgba(40, 20, 60, 0.35);
+}
+
+@media (max-height: 720px) {
+  .welcome-hero {
+    width: min(360px, 90vw);
+  }
+
+  .welcome-actions {
+    margin-top: 1rem;
+  }
+}

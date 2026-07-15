@@ -1,0 +1,156 @@
+.login-standalone {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem 3rem;
+  background: radial-gradient(ellipse at top, #141c28 0%, #0a0e14 55%);
+}
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(440px, 100%);
+  color: #f5f5f5;
+}
+
+.login-container .app-logo--auth {
+  align-self: center;
+}
+
+.login-container--wide {
+  width: min(460px, 100%);
+}
+
+.login-product-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.login-product-lead {
+  margin: 0 0 1.25rem;
+  text-align: center;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.login-bootstrap {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  background: #111827;
+  border: 1px solid #2a3a52;
+}
+
+.login-bootstrap-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.login-bootstrap-lead {
+  margin: 0 0 0.75rem;
+}
+
+.login-bootstrap-fields {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.login-bootstrap-fields dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.login-bootstrap-fields dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.92rem;
+  word-break: break-all;
+}
+
+.login-bootstrap-actions {
+  flex-wrap: wrap;
+}
+
+.login-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.login-tab {
+  flex: 1;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 0.45rem 0.5rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-tab.is-active {
+  background: rgba(94, 156, 255, 0.15);
+  border-color: #5e9cff;
+  color: #e8f0ff;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.login-form input {
+  padding: 0.55rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #1e1e1e;
+  color: #fff;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.login-form input::placeholder {
+  color: #8899aa;
+}
+
+.login-submit {
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.login-register-hint {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.login-error {
+  margin-top: 0.75rem;
+}
+
+.login-foot {
+  margin-top: 1rem;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.login-foot code {
+  font-size: 0.85em;
+  color: #9ecfff;
+}

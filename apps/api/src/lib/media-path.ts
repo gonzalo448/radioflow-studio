@@ -3,7 +3,9 @@ import path from "node:path";
 import type { Env } from "../config.js";
 
 export function mediaRootAbs(env: Env): string {
-  return path.resolve(process.cwd(), env.MEDIA_ROOT);
+  const raw = env.MEDIA_ROOT.trim();
+  if (path.isAbsolute(raw)) return path.normalize(raw);
+  return path.resolve(process.cwd(), raw);
 }
 
 /** Comprueba que `resolvedFile` quede dentro de `root`. */
@@ -26,8 +28,10 @@ export function resolveAssetFilePath(storedPath: string, env: Env): string | nul
 }
 
 export async function ensureMediaDirs(env: Env): Promise<void> {
-  const uploadDir = path.join(mediaRootAbs(env), "uploads");
-  await fs.promises.mkdir(uploadDir, { recursive: true });
+  const root = mediaRootAbs(env);
+  await fs.promises.mkdir(path.join(root, "uploads"), { recursive: true });
+  await fs.promises.mkdir(path.join(root, "covers"), { recursive: true });
+  await fs.promises.mkdir(path.join(root, "nowplaying"), { recursive: true });
 }
 
 export function relativeToMediaRoot(absolutePath: string, env: Env): string {

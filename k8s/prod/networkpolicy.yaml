@@ -1,0 +1,77 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radioflow-default-deny
+  namespace: radioflow
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radioflow-allow-dns-egress
+  namespace: radioflow
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radioflow-allow-ingress-to-api
+  namespace: radioflow
+spec:
+  podSelector:
+    matchLabels:
+      app: radioflow-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Permite tráfico desde el ingress controller (ajusta etiquetas si tu controller usa otras)
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radioflow-allow-api-to-postgres-redis
+  namespace: radioflow
+spec:
+  podSelector:
+    matchLabels:
+      app: radioflow-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: radioflow-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: radioflow-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+

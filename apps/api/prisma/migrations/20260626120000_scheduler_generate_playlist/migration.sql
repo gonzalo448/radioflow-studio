@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "SchedulerActionType" ADD VALUE 'GENERATE_AND_PLAY_PLAYLIST';
