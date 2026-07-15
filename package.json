@@ -35,6 +35,7 @@
     "smoke:api": "node scripts/smoke-api.mjs",
     "smoke:broadcast": "node scripts/smoke-broadcast.mjs",
     "smoke:broadcast:mock": "cross-env SMOKE_BROADCAST_MODE=mock node scripts/smoke-broadcast.mjs",
+    "smoke:cart": "node scripts/smoke-cart.mjs",
     "soak:sample": "cross-env SOAK_ONCE=1 node scripts/soak-watch.mjs",
     "soak:watch": "node scripts/soak-watch.mjs",
     "verify:prod-staging": "node scripts/prod-staging-verify.mjs",
