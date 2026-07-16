@@ -58,9 +58,11 @@ function whichFfmpeg() {
  * Filtro alineado al encoder (PlaySegmentSpec / A1): atrim + afade + volume.
  * Si FFmpeg rechaza estos filtros, el aire real también fallaría.
  */
-function playSegmentAf() {
-  // Ventana corta con fundidos: suficiente para validar la cadena.
-  return "atrim=start=0:end=3,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.08,afade=t=out:st=2.7:d=0.08,volume=0dB";
+function playSegmentAf(windowSec = 3) {
+  // Ventana con fundidos: suficiente para validar la cadena (mock corta, icecast sostenida).
+  const end = Math.max(1, windowSec);
+  const outSt = Math.max(0.1, end - 0.3);
+  return `atrim=start=0:end=${end},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.08,afade=t=out:st=${outSt}:d=0.08,volume=0dB`;
 }
 
 function spawnFfmpeg(args, { label }) {
@@ -94,7 +96,7 @@ function spawnFfmpeg(args, { label }) {
 async function runMock() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rf-smoke-broadcast-"));
   const outMp3 = path.join(tmpDir, "segment.mp3");
-  const af = playSegmentAf();
+  const af = playSegmentAf(3);
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -225,7 +227,9 @@ async function runIcecast() {
   }
 
   // Antes de publicar: el mount suele ser 404. Si ya hay fuente (icecast-hold), igual validamos bytes.
-  const af = playSegmentAf();
+  // La fuente debe seguir viva mientras leemos el mount: ventana ≈ timeout del lector.
+  const publishSec = Math.max(20, Math.ceil(timeoutMs / 1000) + 15);
+  const af = playSegmentAf(publishSec - 1);
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -234,7 +238,7 @@ async function runIcecast() {
     "-f",
     "lavfi",
     "-i",
-    "sine=frequency=880:duration=30",
+    `sine=frequency=880:duration=${publishSec}`,
     "-vn",
     "-ar",
     "44100",

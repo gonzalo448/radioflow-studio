@@ -99,7 +99,7 @@ jobs:
           cd ../..
           ( cd apps/api && node dist/index.js ) &
           API_PID=$!
-          ( cd apps/web && cross-env VITE_ALLOW_WEB_PANEL=true npx vite --host 127.0.0.1 --port 5173 --strictPort ) &
+          ( cd apps/web && VITE_ALLOW_WEB_PANEL=true npx vite --host 127.0.0.1 --port 5173 --strictPort ) &
           WEB_PID=$!
           cleanup() {
             kill -TERM -"$WEB_PID" 2>/dev/null || true

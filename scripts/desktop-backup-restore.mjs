@@ -289,9 +289,11 @@ async function runSelfTest() {
 
   log("selftest: restore…");
   await doRestoreFrom(backupDir, restoreTo);
-  const a = readFileSync(join(userData, "radioflow.db"));
+  // El backup puede pasar por `sqlite3 .backup` (bytes de cabecera distintos según versión):
+  // exigimos identidad restaurado ↔ backup, y equivalencia lógica con el original vía integrity/queries.
+  const a = readFileSync(join(backupDir, "radioflow.db"));
   const b = readFileSync(join(restoreTo, "radioflow.db"));
-  if (!a.equals(b)) fail("DB restaurada ≠ original");
+  if (!a.equals(b)) fail("DB restaurada ≠ backup");
   if (!existsSync(join(restoreTo, "media", "uploads", "tone.wav"))) fail("media no restaurada");
 
   const integrity = assertSqliteReadable(join(restoreTo, "radioflow.db"));
