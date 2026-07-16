@@ -243,12 +243,17 @@ export async function runSchedulerEventsTick(env: Env): Promise<void> {
     return;
   }
 
+  // Candado de transacción (pg_try_advisory_xact_lock): con el pool de Prisma,
+  // lock y unlock de sesión pueden caer en conexiones distintas y dejar el
+  // candado tomado para siempre (ticks silenciosamente muertos). El candado
+  // xact se libera solo al terminar la transacción, incluso ante timeout.
   const lockId = 915_000_001;
-  const got = await prisma.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_lock(${lockId}) AS locked`;
-  if (!got?.[0]?.locked) return;
-  try {
-    await tick();
-  } finally {
-    await prisma.$executeRaw`SELECT pg_advisory_unlock(${lockId})`;
-  }
+  await prisma.$transaction(
+    async (tx) => {
+      const got = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(${lockId}) AS locked`;
+      if (!got?.[0]?.locked) return;
+      await tick();
+    },
+    { maxWait: 5_000, timeout: 60_000 },
+  );
 }

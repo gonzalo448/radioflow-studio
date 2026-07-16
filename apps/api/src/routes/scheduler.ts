@@ -160,10 +160,21 @@ export const schedulerRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opt
     if (!ev) return reply.status(404).send({ error: "No encontrado" });
 
     // fuerza ejecución: setea nextRunAt al pasado y corre un tick
+    const forcedAt = new Date();
     await prisma.schedulerEvent.update({ where: { id }, data: { enabled: true, nextRunAt: new Date(0) } });
     await runSchedulerEventsTick(opts.env);
 
-    const run = await prisma.schedulerRun.findFirst({ where: { eventId: id }, orderBy: { startedAt: "desc" } });
+    // Si el tick periódico tenía el candado, el evento lo ejecuta ese tick:
+    // esperamos brevemente a que aparezca el run terminado.
+    let run = null as Awaited<ReturnType<typeof prisma.schedulerRun.findFirst>>;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      run = await prisma.schedulerRun.findFirst({
+        where: { eventId: id, startedAt: { gte: forcedAt } },
+        orderBy: { startedAt: "desc" },
+      });
+      if (run?.finishedAt) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
     if (!run || !run.finishedAt) return reply.status(500).send({ error: "No se pudo ejecutar" });
     return {
       ok: true,

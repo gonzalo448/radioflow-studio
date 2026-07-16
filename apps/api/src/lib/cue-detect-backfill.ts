@@ -111,14 +111,18 @@ export async function runCueDetectBackfillTick(env: Env): Promise<void> {
       return;
     }
 
+    // xact lock: el lock/unlock de sesión con pool de Prisma puede caer en
+    // conexiones distintas y dejar el candado tomado para siempre.
     const lockId = 915_000_088;
-    const got = await prisma.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_lock(${lockId}) AS locked`;
-    if (!got?.[0]?.locked) return;
-    try {
-      await run();
-    } finally {
-      await prisma.$executeRaw`SELECT pg_advisory_unlock(${lockId})`;
-    }
+    await prisma.$transaction(
+      async (tx) => {
+        const got = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(${lockId}) AS locked`;
+        if (!got?.[0]?.locked) return;
+        await run();
+      },
+      // Lote peor caso: 25 pistas × 90 s de FFmpeg cada una.
+      { maxWait: 5_000, timeout: 3_600_000 },
+    );
   } finally {
     cueBackfillBusy = false;
   }
