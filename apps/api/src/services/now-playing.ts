@@ -87,6 +87,8 @@ function playSegmentFromState(state: Awaited<ReturnType<typeof getStationState>>
   if (!np?.path) return null;
   return buildPlaySegmentSpec(np as ApiStationAsset, {
     cabCrossfadeSec: state.station.cabCrossfadeSec,
+    cabFadeInSec: state.station.cabFadeInSec,
+    cabFadeOutSec: state.station.cabFadeOutSec,
     cabReferenceGainDb: state.station.cabReferenceGainDb,
   });
 }

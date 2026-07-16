@@ -62,6 +62,10 @@ export type CabReferencePlayerProps = {
   referenceDuckDb?: number;
   /** Mix point / overlap fijo : segundos antes de cueEnd. */
   crossfadeSec: number;
+  /** Fade-in de la pista entrante (s). Default = crossfadeSec. */
+  fadeInSec?: number;
+  /** Fade-out de la pista saliente (s). Default = crossfadeSec. */
+  fadeOutSec?: number;
   /** Cue Start/End de la pista al aire (omitir silencios de cabeza/cola). */
   currentCueStartSec?: number | null;
   currentCueEndSec?: number | null;
@@ -154,6 +158,8 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
       stationGainDb,
       referenceDuckDb = 0,
       crossfadeSec,
+      fadeInSec,
+      fadeOutSec,
       currentCueStartSec = null,
       currentCueEndSec = null,
       currentDurationSec = null,
@@ -170,6 +176,9 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
     },
     ref,
   ) {
+    const effectiveFadeInSec = fadeInSec ?? crossfadeSec;
+    const effectiveFadeOutSec = fadeOutSec ?? crossfadeSec;
+    const mixOverlapSec = Math.max(crossfadeSec, effectiveFadeInSec, effectiveFadeOutSec);
     const a0Ref = useRef<HTMLAudioElement | null>(null);
     const a1Ref = useRef<HTMLAudioElement | null>(null);
     const aVtRef = useRef<HTMLAudioElement | null>(null);
@@ -374,7 +383,7 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
         if (softStart) {
           // Evita click/zumbido al arrancar o tras seek a cueStart.
           leadGn.gain.setValueAtTime(0, t);
-          leadGn.gain.linearRampToValueAtTime(linLead, t + 0.08);
+          leadGn.gain.linearRampToValueAtTime(linLead, t + 0.2);
         } else {
           leadGn.gain.setValueAtTime(linLead, t);
         }
@@ -468,6 +477,118 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
       }
     }, [applyDuckGain, applyMaster, currentAssetId, currentPlaybackGainDb, ensureGraph, setDeckGainsImmediate, stopTransition, stopVtOverlay]);
 
+    /**
+     * Fundido inmediato a un asset ya confirmado en servidor (cart playNow / skip).
+     * Evita el corte seco de ~80 ms de `hardReloadCurrent` en cambios de cola bruscos.
+     */
+    const softDumpToCurrent = useCallback(async () => {
+      const g = ensureGraph();
+      const lead = leadDeckRef.current;
+      const outEl = getDeckAudio(lead);
+      const inDeck = (lead ^ 1) as 0 | 1;
+      const inEl = getDeckAudio(inDeck);
+      if (!g || !outEl || !inEl) {
+        void hardReloadCurrent(transmissionArmedRef.current);
+        return;
+      }
+      const hasOut =
+        Boolean(outEl.src) &&
+        !outEl.paused &&
+        Number.isFinite(outEl.currentTime) &&
+        outEl.currentTime > 0.05;
+      if (!hasOut || mixOverlapSec <= 0.05) {
+        void hardReloadCurrent(transmissionArmedRef.current);
+        return;
+      }
+
+      stopTransition();
+      stopVtOverlay();
+      vtBridgeHandoffRef.current = false;
+      vtBridgeIgnoreAssetIdRef.current = null;
+
+      const outDur = Math.max(0, Math.min(12, effectiveFadeOutSec));
+      const inDur = Math.max(0, Math.min(12, effectiveFadeInSec));
+      const fadeDur = Math.max(outDur, inDur);
+      const gen = crossfadeGenRef.current + 1;
+      crossfadeGenRef.current = gen;
+
+      const nextStart = currentCuesRef.current?.cueStartSec ?? 0;
+      inEl.src = streamSrc(currentAssetId);
+      inEl.load();
+      const seekNext = () => {
+        if (nextStart > 0.05) {
+          try {
+            inEl.currentTime = nextStart;
+          } catch {
+            /* */
+          }
+        }
+      };
+      inEl.addEventListener("loadedmetadata", seekNext, { once: true });
+      try {
+        await inEl.play();
+        seekNext();
+      } catch {
+        void hardReloadCurrent(transmissionArmedRef.current);
+        return;
+      }
+      if (gen !== crossfadeGenRef.current) return;
+
+      transitionRef.current = {
+        gen,
+        outDeck: lead,
+        inDeck,
+        expectedNextId: currentAssetId,
+      };
+      onLeadAssetIdChangeRef.current?.(currentAssetId);
+      seekedToCueRef.current = currentAssetId;
+
+      const t0 = g.ctx.currentTime;
+      const outGn = lead === 0 ? g.g0 : g.g1;
+      const inGn = inDeck === 0 ? g.g0 : g.g1;
+      const outLin = Math.max(0, outGn.gain.value);
+      const inLin = combinedLinear(stationGainDb, currentPlaybackGainDb);
+      outGn.gain.cancelScheduledValues(t0);
+      inGn.gain.cancelScheduledValues(t0);
+      outGn.gain.setValueAtTime(outLin, t0);
+      inGn.gain.setValueAtTime(0, t0);
+      if (outDur > 0.001) outGn.gain.linearRampToValueAtTime(0, t0 + outDur);
+      else outGn.gain.setValueAtTime(0, t0);
+      if (inDur > 0.001) inGn.gain.linearRampToValueAtTime(inLin, t0 + inDur);
+      else inGn.gain.setValueAtTime(inLin, t0);
+
+      window.setTimeout(() => {
+        if (gen !== crossfadeGenRef.current) return;
+        if (transitionRef.current?.gen !== gen) return;
+        outEl.pause();
+        outEl.removeAttribute("src");
+        outEl.load();
+        stopTransition();
+        leadDeckRef.current = inDeck;
+        const gg = graphRef.current;
+        if (gg) {
+          const t = gg.ctx.currentTime;
+          const outG = lead === 0 ? gg.g0 : gg.g1;
+          const inG = inDeck === 0 ? gg.g0 : gg.g1;
+          outG.gain.cancelScheduledValues(t);
+          outG.gain.setValueAtTime(0, t);
+          inG.gain.cancelScheduledValues(t);
+          inG.gain.setValueAtTime(combinedLinear(stationGainDb, currentPlaybackGainDb), t);
+        }
+      }, Math.ceil(fadeDur * 1000) + 80);
+    }, [
+      effectiveFadeInSec,
+      effectiveFadeOutSec,
+      mixOverlapSec,
+      currentAssetId,
+      currentPlaybackGainDb,
+      ensureGraph,
+      hardReloadCurrent,
+      stationGainDb,
+      stopTransition,
+      stopVtOverlay,
+    ]);
+
     useEffect(() => {
       applyMaster();
     }, [applyMaster]);
@@ -525,15 +646,20 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
         }
         return;
       }
-      // Cambio inesperado (p. ej. locución tras XF a otra canción por Cr.p.): silenciar ambos decks.
+      // Cambio inesperado (cart playNow, skip, etc.): fundido con el mix de cabina.
       abortIncomingCrossfade();
-      leadDeckRef.current = 0;
-      void hardReloadCurrent(transmissionArmedRef.current);
+      if (transmissionArmedRef.current) {
+        void softDumpToCurrent();
+      } else {
+        leadDeckRef.current = 0;
+        void hardReloadCurrent(false);
+      }
     }, [
       abortIncomingCrossfade,
       currentAssetId,
       currentPlaybackGainDb,
       hardReloadCurrent,
+      softDumpToCurrent,
       stationGainDb,
       stopTransition,
     ]);
@@ -663,7 +789,7 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
 
     const startCrossfade = useCallback(async () => {
       // Sin siguiente o XF desactivado (p. ej. locución a continuación): no mezclar.
-      if (!nextAssetId || transitionRef.current || crossfadeSec <= 0.05) return;
+      if (!nextAssetId || transitionRef.current || mixOverlapSec <= 0.05) return;
       if (voiceTrackBridgeRef.current) return;
       const g = ensureGraph();
       const lead = leadDeckRef.current;
@@ -680,13 +806,20 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
       const cues = fileDur > 0 ? clampCuesToFileDuration(rawCues, fileDur) : rawCues;
 
       const ct = outEl.currentTime;
-      const overlap = crossfadeOverlapSec(cues.cueEndSec, cues.cueStartSec, crossfadeSec);
+      const overlap = crossfadeOverlapSec(cues.cueEndSec, cues.cueStartSec, mixOverlapSec);
       const triggerAt = mixTriggerAt(cues.cueEndSec, cues.cueStartSec, overlap);
       if (ct + 0.05 < triggerAt) return;
 
       const remToCueEnd = Math.max(0.12, cues.cueEndSec - ct);
-      // Fundido de duración estándar (= solape configurado), acotado al resto de pista.
-      const fadeDur = Math.min(overlap, remToCueEnd);
+      const fadeOutDur = Math.min(
+        crossfadeOverlapSec(cues.cueEndSec, cues.cueStartSec, effectiveFadeOutSec),
+        remToCueEnd,
+      );
+      const fadeInDur = Math.min(
+        crossfadeOverlapSec(cues.cueEndSec, cues.cueStartSec, effectiveFadeInSec),
+        remToCueEnd,
+      );
+      const mixWindow = Math.max(fadeOutDur, fadeInDur);
 
       const gen = crossfadeGenRef.current + 1;
       crossfadeGenRef.current = gen;
@@ -726,19 +859,23 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
       outGn.gain.cancelScheduledValues(t0);
       inGn.gain.cancelScheduledValues(t0);
       outGn.gain.setValueAtTime(outLin, t0);
-      outGn.gain.linearRampToValueAtTime(0, t0 + fadeDur);
       inGn.gain.setValueAtTime(0, t0);
-      inGn.gain.linearRampToValueAtTime(inLin, t0 + fadeDur);
+      if (fadeOutDur > 0.001) outGn.gain.linearRampToValueAtTime(0, t0 + fadeOutDur);
+      else outGn.gain.setValueAtTime(0, t0);
+      if (fadeInDur > 0.001) inGn.gain.linearRampToValueAtTime(inLin, t0 + fadeInDur);
+      else inGn.gain.setValueAtTime(inLin, t0);
 
       window.setTimeout(() => {
         if (gen !== crossfadeGenRef.current) return;
         if (transitionRef.current?.gen !== gen) return;
         void onRequestSkip();
-      }, Math.ceil(fadeDur * 1000) + 100);
+      }, Math.ceil(mixWindow * 1000) + 100);
     }, [
-      crossfadeSec,
       currentPlaybackGainDb,
+      effectiveFadeInSec,
+      effectiveFadeOutSec,
       ensureGraph,
+      mixOverlapSec,
       nextAssetId,
       nextPlaybackGainDb,
       onRequestSkip,
@@ -800,7 +937,7 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
       // Fin de cueEnd: si no hay siguiente o crossfade desactivado (locución a continuación), skip limpio
       if (cues && c >= cues.cueEndSec - 0.04) {
         if (transitionRef.current) return;
-        if (crossfadeSec > 0.05 && nextAssetId) {
+        if (mixOverlapSec > 0.05 && nextAssetId) {
           void startCrossfade();
         } else {
           void onRequestSkip();
@@ -808,9 +945,9 @@ export const CabReferencePlayer = forwardRef<CabReferencePlayerHandle, CabRefere
         return;
       }
 
-      if (crossfadeSec > 0.05 && nextAssetId) void startCrossfade();
+      if (mixOverlapSec > 0.05 && nextAssetId) void startCrossfade();
     }, [
-      crossfadeSec,
+      mixOverlapSec,
       currentAssetId,
       nextAssetId,
       onLeadTick,

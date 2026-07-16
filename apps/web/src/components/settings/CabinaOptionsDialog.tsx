@@ -55,7 +55,10 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
   const canEdit = user?.role === "admin" || user?.role === "editor" || user?.role === "dj";
 
   const [tab, setTab] = useState<CabinaOptionsTab>(initialTab);
-  const [crossfadeSec, setCrossfadeSec] = useState(4);
+  const [crossfadeSec, setCrossfadeSec] = useState(2);
+  const [fadeInSec, setFadeInSec] = useState(2);
+  const [fadeOutSec, setFadeOutSec] = useState(2);
+  const [silenceThresholdDb, setSilenceThresholdDb] = useState(-40);
   const [referenceGainDb, setReferenceGainDb] = useState(0);
   const [vtBridgeEnabled, setVtBridgeEnabled] = useState(true);
   const [vtDuckDb, setVtDuckDb] = useState(12);
@@ -78,7 +81,10 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
   useEffect(() => {
     if (!open) return;
     setTab(initialTab);
-    setCrossfadeSec(state?.station.cabCrossfadeSec ?? 4);
+    setCrossfadeSec(state?.station.cabCrossfadeSec ?? 2);
+    setFadeInSec(state?.station.cabFadeInSec ?? state?.station.cabCrossfadeSec ?? 2);
+    setFadeOutSec(state?.station.cabFadeOutSec ?? state?.station.cabCrossfadeSec ?? 2);
+    setSilenceThresholdDb(state?.station.cabSilenceThresholdDb ?? -40);
     setReferenceGainDb(state?.station.cabReferenceGainDb ?? 0);
     const vt = loadCabVoiceTrackSettings();
     setVtBridgeEnabled(vt.bridgeEnabled);
@@ -89,7 +95,15 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
     setRecording(null);
     setMsg(null);
     setErr(null);
-  }, [open, initialTab, state?.station.cabCrossfadeSec, state?.station.cabReferenceGainDb]);
+  }, [
+    open,
+    initialTab,
+    state?.station.cabCrossfadeSec,
+    state?.station.cabFadeInSec,
+    state?.station.cabFadeOutSec,
+    state?.station.cabSilenceThresholdDb,
+    state?.station.cabReferenceGainDb,
+  ]);
 
   useEffect(() => {
     if (!open || !recording) return;
@@ -111,6 +125,9 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
 
   async function patchStation(patch: {
     cabCrossfadeSec?: number;
+    cabFadeInSec?: number;
+    cabFadeOutSec?: number;
+    cabSilenceThresholdDb?: number;
     cabReferenceGainDb?: number;
     dtmfActions?: Record<string, ApiDtmfAction>;
   }) {
@@ -202,7 +219,8 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
                     <strong>{profile.label}</strong>
                     <p className="muted small">{profile.description}</p>
                     <p className="muted small mono">
-                      Fundido {profile.cabCrossfadeSec}s · {profile.cabReferenceGainDb > 0 ? "+" : ""}
+                      Mix {profile.cabCrossfadeSec}s · in {profile.cabFadeInSec}s · out {profile.cabFadeOutSec}s ·{" "}
+                      {profile.cabSilenceThresholdDb} dB · {profile.cabReferenceGainDb > 0 ? "+" : ""}
                       {profile.cabReferenceGainDb} dB
                     </p>
                   </div>
@@ -212,9 +230,15 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
                     disabled={!canEdit || !token || busy}
                     onClick={() => {
                       setCrossfadeSec(profile.cabCrossfadeSec);
+                      setFadeInSec(profile.cabFadeInSec);
+                      setFadeOutSec(profile.cabFadeOutSec);
+                      setSilenceThresholdDb(profile.cabSilenceThresholdDb);
                       setReferenceGainDb(profile.cabReferenceGainDb);
                       void patchStation({
                         cabCrossfadeSec: profile.cabCrossfadeSec,
+                        cabFadeInSec: profile.cabFadeInSec,
+                        cabFadeOutSec: profile.cabFadeOutSec,
+                        cabSilenceThresholdDb: profile.cabSilenceThresholdDb,
                         cabReferenceGainDb: profile.cabReferenceGainDb,
                       });
                     }}
@@ -230,12 +254,40 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
         {tab === "crossfade" && (
           <div className="cabina-options-panel">
             <p className="muted small">
-              <strong>Mix point</strong> fijo (): segundos de solapamiento antes del Cue End de
-              cada pista. Las pistas con silencios de cabeza/cola usan Cue Start/End detectados en Librería →
-              Procesar → «Detectar cues (sin recortar)». Así la transición dura lo mismo en todas las canciones.
+              Modelo tipo RadioBOSS <strong>Smart Crossfade</strong>: tres piezas que trabajan juntas.
+              Configuración → Fundidos (esta pestaña).
             </p>
+
+            <ol className="muted small cabina-smart-xfade-steps">
+              <li>
+                <strong>Gap Killer (recorte de silencios)</strong> — Cue Start / Cue End por pista según el
+                umbral en dB. Se detectan en Librería → Procesar o en backfill automático.
+              </li>
+              <li>
+                <strong>Smart Crossfade (mix point)</strong> — cuánto antes del Cue End empieza la mezcla.
+              </li>
+              <li>
+                <strong>Fades</strong> — fade-out de A y fade-in de B independientes (recomendado{" "}
+                <strong>2,0 s</strong>).
+              </li>
+            </ol>
+
             <label className="muted small voicetrack-duck-slider">
-              Solapamiento (Mix)
+              Umbral Gap Killer
+              <input
+                type="range"
+                min={-60}
+                max={-20}
+                step={1}
+                value={silenceThresholdDb}
+                disabled={!canEdit || busy}
+                onChange={(e) => setSilenceThresholdDb(Number(e.target.value))}
+              />
+              <span className="mono">{silenceThresholdDb} dBFS</span>
+            </label>
+
+            <label className="muted small voicetrack-duck-slider">
+              Mix point (solape)
               <input
                 type="range"
                 min={0}
@@ -247,19 +299,76 @@ export function CabinaOptionsDialog({ open, initialTab = "crossfade", onClose }:
               />
               <span className="mono">{crossfadeSec.toFixed(1)} s</span>
             </label>
-            <button
-              type="button"
-              className="btn primary btn-compact mt"
-              disabled={!canEdit || !token || busy}
-              onClick={() => void patchStation({ cabCrossfadeSec: crossfadeSec })}
-            >
-              Aplicar mix point
-            </button>
+
+            <label className="muted small voicetrack-duck-slider">
+              Fade out (pista saliente)
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={0.5}
+                value={fadeOutSec}
+                disabled={!canEdit || busy}
+                onChange={(e) => setFadeOutSec(Number(e.target.value))}
+              />
+              <span className="mono">{fadeOutSec.toFixed(1)} s</span>
+            </label>
+
+            <label className="muted small voicetrack-duck-slider">
+              Fade in (pista entrante)
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={0.5}
+                value={fadeInSec}
+                disabled={!canEdit || busy}
+                onChange={(e) => setFadeInSec(Number(e.target.value))}
+              />
+              <span className="mono">{fadeInSec.toFixed(1)} s</span>
+            </label>
+
+            <div className="row tight mt" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="btn primary btn-compact"
+                disabled={!canEdit || !token || busy}
+                onClick={() =>
+                  void patchStation({
+                    cabCrossfadeSec: crossfadeSec,
+                    cabFadeInSec: fadeInSec,
+                    cabFadeOutSec: fadeOutSec,
+                    cabSilenceThresholdDb: silenceThresholdDb,
+                  })
+                }
+              >
+                Aplicar fundidos
+              </button>
+              <button
+                type="button"
+                className="btn btn-compact"
+                disabled={!canEdit || !token || busy}
+                onClick={() => {
+                  setCrossfadeSec(2);
+                  setFadeInSec(2);
+                  setFadeOutSec(2);
+                  setSilenceThresholdDb(-40);
+                  void patchStation({
+                    cabCrossfadeSec: 2,
+                    cabFadeInSec: 2,
+                    cabFadeOutSec: 2,
+                    cabSilenceThresholdDb: -40,
+                  });
+                }}
+              >
+                Recomendado 2 s / −40 dB
+              </button>
+            </div>
 
             <hr style={{ border: 0, borderTop: "1px solid var(--border, #333)", margin: "1.25rem 0" }} />
             <p className="muted small">
-              <strong>Voice track</strong> : la locución se superpone al outro de la canción A y a la
-              intro de la B, con ducking de la cama musical. El ítem VT no suena como pista principal.
+              <strong>Voice track</strong> — la locución se superpone al outro de A y a la intro de B, con
+              ducking de la cama. El ítem VT no suena como pista principal (puente estilo RadioBOSS).
             </p>
             <label className="voicetrack-duck-toggle">
               <input

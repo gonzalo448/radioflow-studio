@@ -1,9 +1,10 @@
 /**
  * A6 — Backup / restore del producto desktop (SQLite + jwt + media opcional).
  *
- * Backup:
+ * Backup (incluye media por defecto; DB + jwt + bóveda):
  *   node scripts/desktop-backup-restore.mjs
- *   DESKTOP_USER_DATA="%APPDATA%\\radioflow-studio" INCLUDE_MEDIA=1 node scripts/desktop-backup-restore.mjs
+ *   DESKTOP_USER_DATA="%APPDATA%\\radioflow-studio" node scripts/desktop-backup-restore.mjs
+ *   INCLUDE_MEDIA=0 node scripts/desktop-backup-restore.mjs   # solo DB + jwt
  *
  * Restore (app CERRADA):
  *   RESTORE=1 BACKUP_DIR=backups/desktop-... node scripts/desktop-backup-restore.mjs
@@ -31,6 +32,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import {
   sha256File,
@@ -39,6 +41,8 @@ import {
   verifyManifest,
   relativeSafe,
 } from "./lib/backup-manifest.mjs";
+
+const require = createRequire(import.meta.url);
 
 const doRestore = process.env.RESTORE === "1";
 const doVerify = process.env.VERIFY === "1";
@@ -58,7 +62,10 @@ function backupsRoot() {
 }
 
 function includeMedia() {
-  return process.env.INCLUDE_MEDIA === "1";
+  // Producto desktop: la bóveda es parte del estado. Opt-out con INCLUDE_MEDIA=0.
+  const raw = process.env.INCLUDE_MEDIA;
+  if (raw == null || raw === "") return true;
+  return raw !== "0" && raw.toLowerCase() !== "false";
 }
 
 function defaultUserData() {
@@ -199,23 +206,82 @@ async function doRestoreFrom(backupDir, userData) {
   log("Abrí RadioFlow Studio y comprobá login / biblioteca.");
 }
 
+function createSelftestSqlite(dbPath) {
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE Station (id TEXT PRIMARY KEY, cabCrossfadeSec REAL NOT NULL DEFAULT 2);
+      INSERT INTO Station (id, cabCrossfadeSec) VALUES ('main', 2);
+      CREATE TABLE MediaAsset (id TEXT PRIMARY KEY, path TEXT NOT NULL);
+      INSERT INTO MediaAsset (id, path) VALUES ('a1', 'uploads/tone.wav');
+    `);
+    db.close();
+    return "node:sqlite";
+  } catch {
+    /* CLI o fallback */
+  }
+  const sql = [
+    "CREATE TABLE Station (id TEXT PRIMARY KEY, cabCrossfadeSec REAL NOT NULL DEFAULT 2);",
+    "INSERT INTO Station (id, cabCrossfadeSec) VALUES ('main', 2);",
+    "CREATE TABLE MediaAsset (id TEXT PRIMARY KEY, path TEXT NOT NULL);",
+    "INSERT INTO MediaAsset (id, path) VALUES ('a1', 'uploads/tone.wav');",
+  ].join("");
+  const r = spawnSync("sqlite3", [dbPath, sql], { encoding: "utf8", shell: false });
+  if (r.status === 0 && existsSync(dbPath)) return "sqlite3";
+  fail("no se pudo crear SQLite de selftest (node:sqlite / sqlite3)");
+}
+
+function assertSqliteReadable(dbPath) {
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const row = db.prepare("PRAGMA integrity_check").get();
+    const station = db.prepare("SELECT cabCrossfadeSec FROM Station WHERE id = ?").get("main");
+    db.close();
+    const ok = String(row?.integrity_check ?? row?.["integrity_check"] ?? Object.values(row ?? {})[0] ?? "")
+      .trim()
+      .toLowerCase();
+    if (ok !== "ok") return { ok: false, detail: ok || "integrity_check falló" };
+    if (!station || Number(station.cabCrossfadeSec) !== 2) {
+      return { ok: false, detail: "fila Station.main inválida tras restore" };
+    }
+    return { ok: true, detail: "ok" };
+  } catch (err) {
+    const r = spawnSync("sqlite3", [dbPath, "PRAGMA integrity_check;"], {
+      encoding: "utf8",
+      shell: false,
+    });
+    if (r.status !== 0) {
+      return { ok: false, detail: err?.message || "no se pudo abrir SQLite restaurada" };
+    }
+    const out = String(r.stdout || "").trim().toLowerCase();
+    if (out !== "ok") return { ok: false, detail: out || r.stderr || "integrity_check falló" };
+    return { ok: true, detail: "ok" };
+  }
+}
+
 async function runSelfTest() {
   const root = mkdtempSync(join(tmpdir(), "rf-desktop-backup-"));
   const userData = join(root, "userData");
   const restoreTo = join(root, "restored");
   mkdirSync(userData, { recursive: true });
-  writeFileSync(join(userData, "radioflow.db"), Buffer.from("RF-SQLITE-SELFTEST-V1\n" + "x".repeat(2048)));
+  const dbMode = createSelftestSqlite(join(userData, "radioflow.db"));
   writeFileSync(join(userData, "jwt-secret.txt"), "selftest-jwt-secret-32-chars-minimum!!");
-  mkdirSync(join(userData, "media"), { recursive: true });
-  writeFileSync(join(userData, "media", "tone.txt"), "audio-placeholder");
+  mkdirSync(join(userData, "media", "uploads"), { recursive: true });
+  writeFileSync(join(userData, "media", "uploads", "tone.wav"), "RIFF....WAVEfmt ");
 
   process.env.DESKTOP_USER_DATA = userData;
   process.env.BACKUPS_ROOT = join(root, "backups");
-  process.env.INCLUDE_MEDIA = "1";
+  delete process.env.INCLUDE_MEDIA; // debe incluir media por defecto
   process.env.BACKUP_HMAC_SECRET = "selftest-hmac-secret";
 
+  log(`selftest: DB modo=${dbMode}`);
   log("selftest: backup…");
   const backupDir = await doBackup(userData);
+  if (!existsSync(join(backupDir, "media", "uploads", "tone.wav"))) {
+    fail("backup sin media (INCLUDE_MEDIA debería ser on por defecto)");
+  }
 
   log("selftest: verify…");
   const v1 = await verifyManifest(backupDir, { requireSignature: true });
@@ -226,7 +292,11 @@ async function runSelfTest() {
   const a = readFileSync(join(userData, "radioflow.db"));
   const b = readFileSync(join(restoreTo, "radioflow.db"));
   if (!a.equals(b)) fail("DB restaurada ≠ original");
-  if (!existsSync(join(restoreTo, "media", "tone.txt"))) fail("media no restaurada");
+  if (!existsSync(join(restoreTo, "media", "uploads", "tone.wav"))) fail("media no restaurada");
+
+  const integrity = assertSqliteReadable(join(restoreTo, "radioflow.db"));
+  if (!integrity.ok) fail(`SQLite integrity: ${integrity.detail}`);
+  log(`selftest: SQLite integrity_check=${integrity.detail}`);
 
   log("selftest: detectar corrupción…");
   writeFileSync(join(backupDir, "radioflow.db"), Buffer.from("CORRUPTED"));

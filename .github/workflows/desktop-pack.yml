@@ -6,7 +6,15 @@ on:
     branches: [main, master]
     paths:
       - "apps/desktop/**"
+      - "apps/encoder/**"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "packages/shared/**"
       - "scripts/desktop-electron-pack.mjs"
+      - "scripts/stage-api-for-desktop.mjs"
+      - "scripts/stage-encoder-for-desktop.mjs"
+      - "package.json"
+      - "package-lock.json"
 
 jobs:
   pack:
@@ -37,10 +45,12 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build web + API embed
+      - name: Build web + API/encoder embed
         run: |
           npm run build -w @radioflow/shared
+          node scripts/stage-encoder-for-desktop.mjs
           npm run build -w @radioflow/api
+          node scripts/stage-api-for-desktop.mjs
           npm run build -w @radioflow/web
           node scripts/ensure-electron-for-desktop.mjs
 

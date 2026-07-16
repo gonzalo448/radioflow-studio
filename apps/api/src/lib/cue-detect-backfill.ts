@@ -35,6 +35,15 @@ export async function runCueDetectBackfillBatch(
   }
 
   const batchSize = Math.min(Math.max(opts?.batchSize ?? env.CUE_DETECT_BACKFILL_BATCH_SIZE, 1), 25);
+  const station = await prisma.station.findUnique({
+    where: { id: "main" },
+    select: { cabSilenceThresholdDb: true },
+  });
+  const silenceThresholdDb =
+    station?.cabSilenceThresholdDb != null && Number.isFinite(station.cabSilenceThresholdDb)
+      ? station.cabSilenceThresholdDb
+      : -40;
+
   const assets = await prisma.mediaAsset.findMany({
     where: {
       OR: [{ cueStartSec: null }, { cueEndSec: null }],
@@ -63,6 +72,7 @@ export async function runCueDetectBackfillBatch(
       const cues = await detectAndPersistTrackCues(prisma, env, asset, {
         force: true,
         fallbackOnFailure: true,
+        noiseDb: silenceThresholdDb,
         timeoutMs: Math.min(env.LIBRARY_PROCESS_FFMPEG_TIMEOUT_MS, 90_000),
       });
       if (cues) updated += 1;

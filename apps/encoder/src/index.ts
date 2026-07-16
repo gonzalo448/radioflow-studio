@@ -17,10 +17,15 @@ import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { playSegmentCrossfadeOverlapSec, type ApiVoiceTrackOverlaySpec } from "@radioflow/shared";
+import {
+  playSegmentFadeDurationSec,
+  resolvePlaySegmentFades,
+  type ApiVoiceTrackOverlaySpec,
+} from "@radioflow/shared";
 import { pushIcecastAdminMetadata } from "./icecast-metadata.js";
 import { resolveFfmpegPath, spawnFfmpegHidden } from "./ffmpeg-exec.js";
 import { decideSkipAfterNaturalEnd, isNaturalFfmpegEnd } from "./eof-skip-policy.js";
+import { playSegmentKey } from "./play-segment-key.js";
 import { buildVoiceTrackOverlayFilterComplex } from "./vt-overlay-ffmpeg.js";
 
 const encoderRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -72,6 +77,8 @@ type PlaySegment = {
   durationSec: number | null;
   playbackGainDb: number;
   cabCrossfadeSec: number;
+  cabFadeInSec?: number;
+  cabFadeOutSec?: number;
   cabReferenceGainDb: number;
 };
 
@@ -96,6 +103,8 @@ type StationMsg = {
     voiceTrackOverlay?: ApiVoiceTrackOverlaySpec | null;
     station?: {
       cabCrossfadeSec?: number;
+      cabFadeInSec?: number;
+      cabFadeOutSec?: number;
       cabReferenceGainDb?: number;
     };
   };
@@ -220,12 +229,9 @@ function buildSegmentAudioFilter(seg: PlaySegment | null | undefined): string | 
       : seg.durationSec != null && seg.durationSec > start + 0.2
         ? seg.durationSec
         : null;
-  const fade = playSegmentCrossfadeOverlapSec(
-    start,
-    end,
-    seg.durationSec,
-    seg.cabCrossfadeSec ?? 4,
-  );
+  const fades = resolvePlaySegmentFades(seg);
+  const fadeIn = playSegmentFadeDurationSec(start, end, seg.durationSec, fades.fadeInSec);
+  const fadeOut = playSegmentFadeDurationSec(start, end, seg.durationSec, fades.fadeOutSec);
   const gainDb = (seg.cabReferenceGainDb ?? 0) + (seg.playbackGainDb ?? 0);
   const parts: string[] = [];
 
@@ -236,10 +242,12 @@ function buildSegmentAudioFilter(seg: PlaySegment | null | undefined): string | 
   }
 
   const dur = end != null ? end - start : null;
-  parts.push(`afade=t=in:st=0:d=${fade.toFixed(3)}`);
-  if (dur != null && dur > fade * 2 + 0.1) {
-    const outSt = dur - fade;
-    parts.push(`afade=t=out:st=${outSt.toFixed(3)}:d=${fade.toFixed(3)}`);
+  if (fadeIn > 0.001) {
+    parts.push(`afade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
+  }
+  if (fadeOut > 0.001 && dur != null && dur > fadeIn + fadeOut + 0.1) {
+    const outSt = dur - fadeOut;
+    parts.push(`afade=t=out:st=${outSt.toFixed(3)}:d=${fadeOut.toFixed(3)}`);
   }
   if (Math.abs(gainDb) > 0.05) {
     parts.push(`volume=${gainDb.toFixed(2)}dB`);
@@ -250,7 +258,12 @@ function buildSegmentAudioFilter(seg: PlaySegment | null | undefined): string | 
 function resolvePlaySegment(
   nowPlaying: NowPlayingRow | null | undefined,
   info: NowPlayingInfo | null | undefined,
-  station?: { cabCrossfadeSec?: number; cabReferenceGainDb?: number } | null,
+  station?: {
+    cabCrossfadeSec?: number;
+    cabFadeInSec?: number;
+    cabFadeOutSec?: number;
+    cabReferenceGainDb?: number;
+  } | null,
 ): PlaySegment | null {
   if (info?.playSegment) return info.playSegment;
   if (!nowPlaying?.path && !info?.assetId) return null;
@@ -271,13 +284,16 @@ function resolvePlaySegment(
   ) {
     cueEnd = nowPlaying.durationSec;
   }
+  const fades = resolvePlaySegmentFades(station ?? {});
   return {
     assetId: info?.assetId ?? nowPlaying?.id ?? null,
     cueStartSec: cueStart,
     cueEndSec: cueEnd,
     durationSec: nowPlaying?.durationSec ?? null,
     playbackGainDb: nowPlaying?.playbackGainDb ?? 0,
-    cabCrossfadeSec: station?.cabCrossfadeSec ?? 4,
+    cabCrossfadeSec: fades.overlapSec,
+    cabFadeInSec: fades.fadeInSec,
+    cabFadeOutSec: fades.fadeOutSec,
     cabReferenceGainDb: station?.cabReferenceGainDb ?? 0,
   };
 }
@@ -640,7 +656,12 @@ async function handleTrackFromDbPath(
   artist?: string | null,
   info?: NowPlayingInfo | null,
   nowPlaying?: NowPlayingRow | null,
-  station?: { cabCrossfadeSec?: number; cabReferenceGainDb?: number } | null,
+  station?: {
+    cabCrossfadeSec?: number;
+    cabFadeInSec?: number;
+    cabFadeOutSec?: number;
+    cabReferenceGainDb?: number;
+  } | null,
   voiceTrackOverlay?: ApiVoiceTrackOverlaySpec | null,
 ) {
   if (!dbPath) {
@@ -693,12 +714,8 @@ async function handleTrackFromDbPath(
     playSegment,
     voiceTrackOverlay: effectiveOverlay,
   };
-  const segKey = playSegment
-    ? `${playSegment.cueStartSec}|${playSegment.cueEndSec}|${playSegment.cabCrossfadeSec}|${playSegment.playbackGainDb}|${playSegment.cabReferenceGainDb}|${effectiveOverlay?.voiceTrackAssetId ?? ""}|${effectiveOverlay?.overlayAtSec ?? ""}`
-    : "";
-  const prevSegKey = currentMeta?.playSegment
-    ? `${currentMeta.playSegment.cueStartSec}|${currentMeta.playSegment.cueEndSec}|${currentMeta.playSegment.cabCrossfadeSec}|${currentMeta.playSegment.playbackGainDb}|${currentMeta.playSegment.cabReferenceGainDb}|${currentMeta.voiceTrackOverlay?.voiceTrackAssetId ?? ""}|${currentMeta.voiceTrackOverlay?.overlayAtSec ?? ""}`
-    : "";
+  const segKey = playSegmentKey(playSegment, effectiveOverlay);
+  const prevSegKey = playSegmentKey(currentMeta?.playSegment, currentMeta?.voiceTrackOverlay);
   if (
     abs === lastAbs &&
     currentMeta?.title === meta.title &&
@@ -790,7 +807,12 @@ async function pollStationOnce() {
     nowPlayingInfo?: NowPlayingInfo | null;
     playSegment?: PlaySegment | null;
     voiceTrackOverlay?: ApiVoiceTrackOverlaySpec | null;
-    station?: { cabCrossfadeSec?: number; cabReferenceGainDb?: number };
+    station?: {
+      cabCrossfadeSec?: number;
+      cabFadeInSec?: number;
+      cabFadeOutSec?: number;
+      cabReferenceGainDb?: number;
+    };
   };
   const info = body.nowPlayingInfo
     ? { ...body.nowPlayingInfo, playSegment: body.nowPlayingInfo.playSegment ?? body.playSegment ?? null }

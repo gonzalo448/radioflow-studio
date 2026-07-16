@@ -48,6 +48,12 @@ jobs:
       - name: npm audit (0 critical)
         run: node scripts/ci-verify-npm-audit.mjs
 
+      - name: npm audit production (0 critical/high)
+        run: node scripts/ci-verify-npm-audit.mjs
+        env:
+          NPM_AUDIT_OMIT_DEV: "1"
+          NPM_AUDIT_MAX_HIGH: "0"
+
       - name: Check UTF-8
         run: npm run check:utf8
 
@@ -126,6 +132,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
 
       - name: Install FFmpeg
         run: |
@@ -173,6 +183,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
 
       - name: Desktop backup/restore selftest
         run: npm run backup:desktop:selftest

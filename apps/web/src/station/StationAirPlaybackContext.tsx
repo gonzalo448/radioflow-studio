@@ -20,6 +20,7 @@ import { STATION_PLAY_REQUEST_EVENT } from "../lib/local-audio-import";
 import { sendPlayoutHeartbeat } from "../lib/playout-heartbeat";
 import { parseCmdQueueLabel } from "../lib/playlist-cmd-spec";
 import { useStationLive } from "./StationLiveContext";
+import { resolvePlaySegmentFades } from "@radioflow/shared";
 import {
   CabReferencePlayer,
   type CabBusMeterFrame,
@@ -156,7 +157,7 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
       ? planVoiceTrackBridge(
           queue,
           curPos,
-          state.station.cabCrossfadeSec ?? 4,
+          resolvePlaySegmentFades(state.station).overlapSec,
           airCuesForBridge,
           vtSettings.duckDb,
         )
@@ -209,12 +210,14 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
   const nextCueStart = nextCuesAsset?.cueStartSec ?? null;
   const nextCueEnd = nextCuesAsset?.cueEndSec ?? null;
   const spotNext = Boolean(state) && hasDeferredSpotBeforeNextTrack(queue, curPos);
+  const stationFades = resolvePlaySegmentFades(state?.station ?? {});
   // Con locución/intro/jingle a continuación: corte duro al terminar (0), sin mezclar.
   // Con voice track bridge: XF normal off (el solape lo hace el overlay VT).
-  const cabCrossfadeSec =
-    airIsAnnounce || spotNext || nextAirAssetId == null || voiceTrackBridgePlan
-      ? 0
-      : (state?.station.cabCrossfadeSec ?? 4);
+  const xfDisabled =
+    airIsAnnounce || spotNext || nextAirAssetId == null || Boolean(voiceTrackBridgePlan);
+  const cabCrossfadeSec = xfDisabled ? 0 : stationFades.overlapSec;
+  const cabFadeInSec = xfDisabled ? 0 : stationFades.fadeInSec;
+  const cabFadeOutSec = xfDisabled ? 0 : stationFades.fadeOutSec;
   const cabReferenceGainDb = state?.station.cabReferenceGainDb ?? 0;
 
   const skip = useCallback(async () => {
@@ -592,6 +595,8 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
             stationGainDb={cabReferenceGainDb}
             referenceDuckDb={referenceDuckDb}
             crossfadeSec={cabCrossfadeSec}
+            fadeInSec={cabFadeInSec}
+            fadeOutSec={cabFadeOutSec}
             currentCueStartSec={airCueStart}
             currentCueEndSec={airCueEnd}
             currentDurationSec={

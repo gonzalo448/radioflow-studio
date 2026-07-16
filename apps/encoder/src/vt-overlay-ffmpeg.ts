@@ -1,4 +1,4 @@
-import { playSegmentCrossfadeOverlapSec } from "@radioflow/shared";
+import { playSegmentFadeDurationSec, resolvePlaySegmentFades } from "@radioflow/shared";
 import type { ApiVoiceTrackOverlaySpec } from "@radioflow/shared";
 
 export type PlaySegmentForFilter = {
@@ -7,6 +7,8 @@ export type PlaySegmentForFilter = {
   durationSec: number | null;
   playbackGainDb: number;
   cabCrossfadeSec: number;
+  cabFadeInSec?: number;
+  cabFadeOutSec?: number;
   cabReferenceGainDb: number;
 };
 
@@ -25,7 +27,9 @@ export function buildVoiceTrackOverlayFilterComplex(
       : seg.durationSec != null && seg.durationSec > start + 0.2
         ? seg.durationSec
         : start + 30;
-  const fade = playSegmentCrossfadeOverlapSec(start, end, seg.durationSec, seg.cabCrossfadeSec ?? 4);
+  const fades = resolvePlaySegmentFades(seg);
+  const fadeIn = playSegmentFadeDurationSec(start, end, seg.durationSec, fades.fadeInSec);
+  const fadeOut = playSegmentFadeDurationSec(start, end, seg.durationSec, fades.fadeOutSec);
   const musicGainDb = (seg.cabReferenceGainDb ?? 0) + (seg.playbackGainDb ?? 0);
   const vtGainDb = (seg.cabReferenceGainDb ?? 0) + (overlay.voiceTrackGainDb ?? 0);
   const duckLin = Math.pow(10, -Math.abs(overlay.duckDb) / 20);
@@ -36,10 +40,12 @@ export function buildVoiceTrackOverlayFilterComplex(
   const musicChain = [
     `atrim=start=${start.toFixed(3)}:end=${end.toFixed(3)}`,
     "asetpts=PTS-STARTPTS",
-    `afade=t=in:st=0:d=${fade.toFixed(3)}`,
   ];
-  if (dur > fade * 2 + 0.1) {
-    musicChain.push(`afade=t=out:st=${(dur - fade).toFixed(3)}:d=${fade.toFixed(3)}`);
+  if (fadeIn > 0.001) {
+    musicChain.push(`afade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
+  }
+  if (fadeOut > 0.001 && dur > fadeIn + fadeOut + 0.1) {
+    musicChain.push(`afade=t=out:st=${(dur - fadeOut).toFixed(3)}:d=${fadeOut.toFixed(3)}`);
   }
   if (Math.abs(musicGainDb) > 0.05) {
     musicChain.push(`volume=${musicGainDb.toFixed(2)}dB`);

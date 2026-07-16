@@ -1,4 +1,4 @@
-import { playSegmentCrossfadeOverlapSec, type ApiVoiceTrackOverlaySpec } from "@radioflow/shared";
+import { playSegmentFadeDurationSec, type ApiVoiceTrackOverlaySpec } from "@radioflow/shared";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildVoiceTrackOverlayFilterComplex } from "./vt-overlay-ffmpeg.js";
@@ -24,7 +24,7 @@ describe("buildVoiceTrackOverlayFilterComplex", () => {
   });
 
   it("solape de fade coincide con shared", () => {
-    const fade = playSegmentCrossfadeOverlapSec(0, 30, 30, 4);
+    const fade = playSegmentFadeDurationSec(0, 30, 30, 4);
     const fc = buildVoiceTrackOverlayFilterComplex(
       {
         cueStartSec: 0,
@@ -32,6 +32,8 @@ describe("buildVoiceTrackOverlayFilterComplex", () => {
         durationSec: 30,
         playbackGainDb: 0,
         cabCrossfadeSec: 4,
+        cabFadeInSec: 4,
+        cabFadeOutSec: 4,
         cabReferenceGainDb: 0,
       },
       { overlayAtSec: 20, duckDb: 12, voiceTrackGainDb: 0 },
