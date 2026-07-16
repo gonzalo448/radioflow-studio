@@ -372,7 +372,7 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
     return reply.status(204).send();
   });
 
-  app.post("/station/skip", async (request, reply) => {
+  app.post<{ Reply: ApiStationState | ApiError }>("/station/skip", async (request, reply) => {
     if (!requireRoles(request, reply, ROLES_STATION_WRITE)) return;
     await ensureMainStation();
 
@@ -385,7 +385,8 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
       details: result.logDetails,
     });
 
-    return result.station;
+    // Misma forma que queue-from-playlist / queue-clear: estado con cola (smoke B4 + clientes).
+    return getStationState();
   });
 
   app.post("/station/air-quality-alert", async (request, reply) => {
