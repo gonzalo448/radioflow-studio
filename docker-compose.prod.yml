@@ -37,6 +37,8 @@ services:
       PORT: "4000"
       DATABASE_URL: postgresql://radioflow:${POSTGRES_PASSWORD}@postgres:5432/radioflow
       JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET en .env (mín 32 chars)}
+      # Soak 72 h: permite tokens de acceso largos para el observador (default prod 15m).
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       # Define explícitamente el origen del panel. Para desactivar CORS: "none"
       CORS_ORIGIN: ${CORS_ORIGIN:-none}
       CORS_CREDENTIALS: ${CORS_CREDENTIALS:-true}
