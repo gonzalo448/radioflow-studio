@@ -22,13 +22,17 @@ function readAdminMeta() {
 /**
  * En escritorio: si ya hay destino Icecast/AzuraCast guardado, activa emisión
  * y arranca el encoder al iniciar sesión — sin pasar por Emitir ni pulsar botones.
+ *
+ * Nota: no marcar el intento como definitivo hasta éxito o fallo terminal,
+ * para sobrevivir al double-mount de React Strict Mode y a reinicios de la API.
  */
 export function useAutoResumeEncoder() {
   const { token, user } = useAuth();
-  const triedRef = useRef(false);
+  const successRef = useRef(false);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
-    if (triedRef.current) return;
+    if (successRef.current || inFlightRef.current) return;
     if (!token || !user) return;
     if (!hasDesktopEncoderBridge()) return;
 
@@ -37,12 +41,16 @@ export function useAutoResumeEncoder() {
     if (!canEdit) return;
 
     let cancelled = false;
-    triedRef.current = true;
+    inFlightRef.current = true;
 
     void (async () => {
       try {
         const local = await getLocalEncoderStatus();
-        if (cancelled || local?.running) return;
+        if (cancelled) return;
+        if (local?.running) {
+          successRef.current = true;
+          return;
+        }
 
         const [settings, targets] = await Promise.all([
           apiFetch<ApiSettings>("/api/settings"),
@@ -75,15 +83,21 @@ export function useAutoResumeEncoder() {
 
         if (cancelled) return;
         const meta = readAdminMeta();
-        await startLocalEncoder(token, meta);
+        const res = await startLocalEncoder(token, meta);
+        if (cancelled) return;
+        if (res.running) {
+          successRef.current = true;
+        }
       } catch {
         // Silencioso: Emitir sigue disponible para arranque manual.
-        triedRef.current = false;
+      } finally {
+        inFlightRef.current = false;
       }
     })();
 
     return () => {
       cancelled = true;
+      inFlightRef.current = false;
     };
   }, [token, user]);
 }
