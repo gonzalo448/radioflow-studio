@@ -1,5 +1,6 @@
 import {
   buildPlaySegmentSpec,
+  isSpotLikeAsset,
   playSegmentCrossfadeOverlapSec,
   playSegmentFadeDurationSec,
   resolvePlaySegmentFades,
@@ -38,8 +39,8 @@ describe("Smart Crossfade", () => {
         id: "asset-1",
         path: "music/track.mp3",
         cueStartSec: 1,
-        cueEndSec: 11,
-        durationSec: 12,
+        cueEndSec: 191,
+        durationSec: 192,
         playbackGainDb: -1.5,
       },
       {
@@ -68,6 +69,34 @@ describe("Smart Crossfade", () => {
     const overlay = { voiceTrackAssetId: "vt-1", overlayAtSec: 8 };
     assert.equal(playSegmentKey(segment, overlay), playSegmentKey({ ...segment }, { ...overlay }));
     assert.notEqual(playSegmentKey(segment, overlay), playSegmentKey({ ...segment, cabFadeInSec: 1 }, overlay));
+  });
+
+  it("detecta spots por género o por duración corta", () => {
+    assert.equal(isSpotLikeAsset({ genre: "Jingle Salsa", durationSec: 4 }), true);
+    assert.equal(isSpotLikeAsset({ genre: "Jingles Salsa", durationSec: 3 }), true);
+    assert.equal(isSpotLikeAsset({ genre: "time-announce", durationSec: null }), true);
+    assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: 12 }), true);
+    assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: 240 }), false);
+    assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: null }), false);
+    assert.equal(isSpotLikeAsset(null), false);
+  });
+
+  it("los spots salen completos: sin mix ni fades en el contrato", () => {
+    const segment = buildPlaySegmentSpec(
+      {
+        id: "jingle-1",
+        path: "uploads/Jingles Salsa/jingle.mp3",
+        genre: "Jingle Salsa",
+        cueStartSec: 0,
+        cueEndSec: 4,
+        durationSec: 4,
+        playbackGainDb: 0,
+      },
+      { cabCrossfadeSec: 2, cabFadeInSec: 2, cabFadeOutSec: 2, cabReferenceGainDb: 0 },
+    );
+    assert.equal(segment.cabCrossfadeSec, 0);
+    assert.equal(segment.cabFadeInSec, 0);
+    assert.equal(segment.cabFadeOutSec, 0);
   });
 
   it("no genera filtros afade con duración cero", () => {

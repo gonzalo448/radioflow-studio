@@ -1,4 +1,5 @@
 import type { ApiPlaybackQueueEntry, ApiStationAsset, ApiStationQueueItem } from "@radioflow/shared";
+import { isSpotLikeAsset } from "@radioflow/shared";
 
 type AssetDur = ApiStationAsset & { durationSec?: number | null };
 
@@ -20,6 +21,8 @@ export function isAnnounceGenreAsset(asset: { genre?: string | null } | null | u
 export function isAnnounceOrDeferredQueueRow(row: ApiStationQueueItem | undefined): boolean {
   if (!row) return false;
   if (isDeferredSpotKind(row.kind)) return true;
+  // Jingles de playlist entran como pista normal: pieza corta o género "Jingle…" = spot.
+  if (row.kind === "track" && isSpotLikeAsset(row.asset)) return true;
   if ((row.kind === "track" || row.kind === "voicetrack") && isAnnounceGenreAsset(row.asset)) return true;
   return false;
 }

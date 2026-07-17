@@ -437,6 +437,41 @@ export function resolvePlaySegmentFades(station: {
 }
 
 /**
+ * Piezas tipo spot (jingles, locuciones, IDs, sweepers): deben sonar completas,
+ * sin crossfade encima de la canción anterior ni fundidos que se coman su inicio/fin.
+ */
+export const SPOT_LIKE_MAX_DURATION_SEC = 30;
+
+export function isSpotLikeAsset(
+  asset:
+    | {
+        genre?: string | null;
+        durationSec?: number | null;
+        cueStartSec?: number | null;
+        cueEndSec?: number | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!asset) return false;
+  const g = (asset.genre ?? "").trim().toLowerCase();
+  if (g === "time-announce" || g === "station-intro" || g === "jingle-auto") return true;
+  if (/jingle|locuci|sweeper|cu[nñ]a/.test(g)) return true;
+  const start =
+    asset.cueStartSec != null && Number.isFinite(asset.cueStartSec) && asset.cueStartSec > 0
+      ? asset.cueStartSec
+      : 0;
+  const end =
+    asset.cueEndSec != null && Number.isFinite(asset.cueEndSec) && asset.cueEndSec > start + 0.2
+      ? asset.cueEndSec
+      : asset.durationSec != null && Number.isFinite(asset.durationSec) && asset.durationSec > 0
+        ? asset.durationSec
+        : null;
+  if (end == null) return false;
+  return end - start <= SPOT_LIKE_MAX_DURATION_SEC;
+}
+
+/**
  * Solape de fundido estándar (misma regla Cabina/encoder).
  * Cero desactiva el solape. Los valores positivos se acotan al 45 % de la pista útil.
  */
@@ -473,7 +508,7 @@ export function buildPlaySegmentSpec(
   asset: Pick<
     ApiStationAsset,
     "id" | "path" | "cueStartSec" | "cueEndSec" | "durationSec" | "playbackGainDb"
-  >,
+  > & { genre?: string | null },
   station: {
     cabCrossfadeSec?: number | null;
     cabFadeInSec?: number | null;
@@ -495,7 +530,11 @@ export function buildPlaySegmentSpec(
   if (cueEndSec != null && asset.durationSec != null && asset.durationSec > 0) {
     cueEndSec = Math.min(cueEndSec, asset.durationSec);
   }
-  const fades = resolvePlaySegmentFades(station);
+  // Spots (jingles/locuciones): suenan completos, sin mix ni fades que se coman inicio/fin.
+  const spot = isSpotLikeAsset(asset);
+  const fades = spot
+    ? { fadeInSec: 0, fadeOutSec: 0, overlapSec: 0 }
+    : resolvePlaySegmentFades(station);
   return {
     assetId: asset.id,
     path: asset.path,

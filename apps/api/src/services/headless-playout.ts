@@ -1,5 +1,6 @@
 import type { Env } from "../config.js";
 import type { QueueEntryKind } from "@radioflow/shared";
+import { isSpotLikeAsset } from "@radioflow/shared";
 import { prisma } from "../db.js";
 import { logAutomation } from "../lib/automation-log.js";
 import {
@@ -107,7 +108,7 @@ async function resolveSegmentNeed(
     cueEndSec?: number | null;
   } | null,
   crossfadeSec: number,
-  nextIsSpot: boolean,
+  noOverlap: boolean,
   vtIsBridged: boolean,
 ): Promise<SegmentNeed | null> {
   if (
@@ -158,7 +159,7 @@ async function resolveSegmentNeed(
   }
 
   return {
-    needSec: applyCrossfadeToSegmentNeed(playable, crossfadeSec, nextIsSpot),
+    needSec: applyCrossfadeToSegmentNeed(playable, crossfadeSec, noOverlap),
     source,
   };
 }
@@ -201,10 +202,10 @@ export async function runHeadlessPlayoutTick(env: Env): Promise<void> {
       (nextRow.kind === "time_announce" ||
         nextRow.kind === "station_intro" ||
         nextRow.kind === "jingle_auto" ||
-        nextRow.asset?.genre === "time-announce" ||
-        nextRow.asset?.genre === "station-intro" ||
-        nextRow.asset?.genre === "jingle-auto"),
+        isSpotLikeAsset(nextRow.asset)),
   );
+  /** Un spot al aire (jingle/locución) suena completo: sin adelantar el skip. */
+  const currentIsSpot = kind === "track" && isSpotLikeAsset(currentQueueEntry.asset);
   const vtIsBridged =
     kind === "voicetrack" &&
     Boolean(prevRow && prevRow.kind === "track" && prevRow.asset) &&
@@ -224,7 +225,7 @@ export async function runHeadlessPlayoutTick(env: Env): Promise<void> {
         }
       : null,
     crossfade,
-    nextIsSpot,
+    nextIsSpot || currentIsSpot,
     vtIsBridged,
   );
   if (!resolved) return;

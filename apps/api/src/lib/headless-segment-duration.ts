@@ -25,9 +25,9 @@ export function playableDurationFromMeta(
 export function applyCrossfadeToSegmentNeed(
   durSec: number,
   crossfadeSec: number,
-  nextIsSpot: boolean,
+  noOverlap: boolean,
 ): number {
-  if (nextIsSpot || crossfadeSec <= 0.05) return Math.max(0.5, durSec);
+  if (noOverlap || crossfadeSec <= 0.05) return Math.max(0.5, durSec);
   const overlap = playSegmentCrossfadeOverlapSec(0, durSec, durSec, crossfadeSec);
   return Math.max(0.5, durSec - overlap);
 }

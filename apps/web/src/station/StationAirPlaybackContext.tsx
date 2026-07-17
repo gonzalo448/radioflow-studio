@@ -20,7 +20,7 @@ import { STATION_PLAY_REQUEST_EVENT } from "../lib/local-audio-import";
 import { sendPlayoutHeartbeat } from "../lib/playout-heartbeat";
 import { parseCmdQueueLabel } from "../lib/playlist-cmd-spec";
 import { useStationLive } from "./StationLiveContext";
-import { resolvePlaySegmentFades } from "@radioflow/shared";
+import { isSpotLikeAsset, resolvePlaySegmentFades } from "@radioflow/shared";
 import {
   CabReferencePlayer,
   type CabBusMeterFrame,
@@ -195,6 +195,8 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
     airCuesAsset?.genre === "time-announce" ||
     airCuesAsset?.genre === "station-intro" ||
     airCuesAsset?.genre === "jingle-auto";
+  /** Jingle/spot al aire (aunque venga como pista normal): sale completo, sin fundido de salida. */
+  const airIsSpot = airIsAnnounce || isSpotLikeAsset(airCuesAsset);
   // Preferir contrato PlaySegmentSpec (A1) cuando la API lo envía; misma ventana que el encoder.
   const playSeg = state?.playSegment ?? state?.nowPlayingInfo?.playSegment ?? null;
   const airCueStart = airIsAnnounce
@@ -214,7 +216,7 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
   // Con locución/intro/jingle a continuación: corte duro al terminar (0), sin mezclar.
   // Con voice track bridge: XF normal off (el solape lo hace el overlay VT).
   const xfDisabled =
-    airIsAnnounce || spotNext || nextAirAssetId == null || Boolean(voiceTrackBridgePlan);
+    airIsSpot || spotNext || nextAirAssetId == null || Boolean(voiceTrackBridgePlan);
   const cabCrossfadeSec = xfDisabled ? 0 : stationFades.overlapSec;
   const cabFadeInSec = xfDisabled ? 0 : stationFades.fadeInSec;
   const cabFadeOutSec = xfDisabled ? 0 : stationFades.fadeOutSec;
