@@ -38,6 +38,7 @@ import type { Env } from "../config.js";
 import { prisma } from "../db.js";
 import { optionalAuth, requireRoles, ROLES_SCHEDULE_WRITE } from "../lib/auth.js";
 import { mediaAssetWhereFromLibraryFilters } from "../lib/library-list-filters.js";
+import { equalsCi } from "../lib/prisma-string-filter.js";
 import { assertAssetsPlayableInVault } from "../lib/library-vault.js";
 import { listLibraryAssetIdsForFill, replacePlaylistItemsWithAssets } from "../lib/playlist-library-fill.js";
 import { transferPlaylistItems } from "../lib/playlist-transfer-items.js";
@@ -348,7 +349,7 @@ export const playlistRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
     const body = fromGenreBody.parse(request.body);
     const genre = body.genre.trim();
     const assets = await prisma.mediaAsset.findMany({
-      where: { genre: { equals: genre, mode: "insensitive" } },
+      where: { genre: equalsCi(genre) },
       orderBy: { title: "asc" },
     });
     if (assets.length === 0) return reply.status(404).send({ error: "No hay medios con ese género" });

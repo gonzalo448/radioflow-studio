@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { containsCi, equalsCi } from "./prisma-string-filter.js";
 
 export type LibraryAssetListFilters = {
   q?: string;
@@ -22,20 +23,20 @@ export function mediaAssetWhereFromLibraryFilters(
     ...(q
       ? {
           OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { artist: { contains: q, mode: "insensitive" } },
-            { album: { contains: q, mode: "insensitive" } },
-            { semanticNote: { contains: q, mode: "insensitive" } },
+            { title: containsCi(q) },
+            { artist: containsCi(q) },
+            { album: containsCi(q) },
+            { semanticNote: containsCi(q) },
           ],
         }
       : {}),
-    ...(genre ? { genre: { equals: genre, mode: "insensitive" } } : {}),
+    ...(genre ? { genre: equalsCi(genre) } : {}),
     ...(artist === "__none__"
       ? { OR: [{ artist: null }, { artist: "" }] }
       : artist
-        ? { artist: { equals: artist, mode: "insensitive" } }
+        ? { artist: equalsCi(artist) }
         : {}),
-    ...(album ? { album: { equals: album, mode: "insensitive" } } : {}),
+    ...(album ? { album: equalsCi(album) } : {}),
     ...(pathPrefix
       ? {
           path: {
