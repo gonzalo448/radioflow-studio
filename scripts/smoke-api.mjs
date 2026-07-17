@@ -217,6 +217,7 @@ async function main() {
     body: JSON.stringify({ email, password: "SmokeTestPassword8" }),
   });
   expectRateLimitHeaders(r, "POST /api/auth/login");
+  const loginRemaining = Number(r.headers.get("RateLimit-Remaining"));
   const login = await expectOk(r, "POST /api/auth/login");
   // 2) rotamos rt0 -> rt1
   r = await fetch(`${base}/api/auth/refresh`, {
@@ -255,16 +256,22 @@ async function main() {
     }
     const loginUrl = `${base}/api/auth/login`;
     const badBody = JSON.stringify({ email, password: "WrongPassword!!!999" });
-    for (let i = 0; i < max; i++) {
+    // El login de reuse detection ya consumió cupos de la misma IP: usar Remaining.
+    const remaining =
+      Number.isInteger(loginRemaining) && loginRemaining >= 0 ? loginRemaining : Math.max(0, max - 1);
+    let saw401 = false;
+    for (let i = 0; i < remaining; i++) {
       r = await fetch(loginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: badBody,
       });
-      expectRateLimitHeaders(r, `POST /api/auth/login fallido ${i + 1}/${max}`);
+      expectRateLimitHeaders(r, `POST /api/auth/login fallido ${i + 1}/${remaining}`);
       const t401 = await r.text();
       if (r.status !== 401) fail(`login fallido: esperaba 401, ${r.status}: ${t401.slice(0, 200)}`);
+      saw401 = true;
     }
+    if (!saw401 && remaining > 0) fail("rate-limit probe: no hubo 401 previos al 429");
     r = await fetch(loginUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -275,7 +282,7 @@ async function main() {
     if (r.status !== 429) fail(`esperaba 429 tras agotar límite, ${r.status}: ${t429.slice(0, 200)}`);
     const ra = r.headers.get("Retry-After");
     if (ra == null || !/^\d+$/.test(String(ra).trim())) fail("429 sin Retry-After entero");
-    console.log("[smoke] rate-limit (429 + cabeceras) OK");
+    console.log(`[smoke] rate-limit (429 + cabeceras, remainingPrev=${remaining}) OK`);
   }
 
   const auth = { Authorization: `Bearer ${reg.token}` };

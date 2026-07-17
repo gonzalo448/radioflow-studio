@@ -4274,6 +4274,16 @@ a.ghost-link:hover {
   margin-top: 0.5rem;
 }
 
+.cabina-smart-xfade-steps {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.25rem;
+  line-height: 1.45;
+}
+
+.cabina-smart-xfade-steps li + li {
+  margin-top: 0.45rem;
+}
+
 .cabina-hotkey-row {
   justify-content: space-between;
   margin: 0.35rem 0;
@@ -4342,7 +4352,6 @@ a.ghost-link:hover {
   background: rgba(248, 113, 113, 0.15);
   border: 1px solid rgba(248, 113, 113, 0.45);
   color: #fca5a5;
-}
 }
 
 .reports-listener-chart {

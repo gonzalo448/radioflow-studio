@@ -20,7 +20,19 @@ fs.rmSync(dest, { recursive: true, force: true });
 fs.mkdirSync(dest, { recursive: true });
 
 for (const name of ["dist", "prisma"]) {
-  fs.cpSync(path.join(apiSrc, name), path.join(dest, name), { recursive: true, dereference: true });
+  fs.cpSync(path.join(apiSrc, name), path.join(dest, name), {
+    recursive: true,
+    dereference: true,
+    filter: (src) => {
+      const base = path.basename(src);
+      if (base === ".data" || base === "node_modules") return false;
+      if (/^tmp.*\.db$/i.test(base)) return false;
+      if (/\.db-(?:wal|shm)$/i.test(base)) return false;
+      // El cliente standalone se regenera en dest; no copiar src/generated del monorepo.
+      if (src.replace(/\\/g, "/").includes("/prisma/") && base === "src") return false;
+      return true;
+    },
+  });
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.join(apiSrc, "package.json"), "utf8"));
@@ -74,6 +86,15 @@ if (fs.existsSync(standaloneWrong)) {
   fs.mkdirSync(path.dirname(standaloneDest), { recursive: true });
   fs.rmSync(standaloneDest, { recursive: true, force: true });
   fs.cpSync(standaloneWrong, standaloneDest, { recursive: true });
+}
+
+// electron-builder excluye carpetas llamadas `node_modules` en extraResources.
+// Las renombramos a `vendor` y Electron crea el junction `node_modules` al arrancar.
+const nm = path.join(dest, "node_modules");
+const vendor = path.join(dest, "vendor");
+if (fs.existsSync(nm)) {
+  fs.rmSync(vendor, { recursive: true, force: true });
+  fs.renameSync(nm, vendor);
 }
 
 console.log("[stage-api-desktop] listo en", dest);

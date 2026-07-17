@@ -398,13 +398,47 @@ export interface ApiPlaySegmentSpec {
   cueEndSec: number | null;
   durationSec: number | null;
   playbackGainDb: number;
+  /** Solape / mix point (s) — dispara el fundido antes del Cue End. */
   cabCrossfadeSec: number;
+  /** Fade-in de la pista entrante (s). */
+  cabFadeInSec: number;
+  /** Fade-out de la pista saliente (s). */
+  cabFadeOutSec: number;
   cabReferenceGainDb: number;
+}
+
+/** Fades resueltos (compat: si faltan fade in/out, se usa cabCrossfadeSec). */
+export type PlaySegmentFades = {
+  fadeInSec: number;
+  fadeOutSec: number;
+  /** Ventana de mix (= cabCrossfadeSec o max(fadeIn, fadeOut)). */
+  overlapSec: number;
+};
+
+export function resolvePlaySegmentFades(station: {
+  cabCrossfadeSec?: number | null;
+  cabFadeInSec?: number | null;
+  cabFadeOutSec?: number | null;
+}): PlaySegmentFades {
+  const legacy =
+    station.cabCrossfadeSec != null && Number.isFinite(station.cabCrossfadeSec)
+      ? Math.max(0, station.cabCrossfadeSec)
+      : 2;
+  const fadeInSec =
+    station.cabFadeInSec != null && Number.isFinite(station.cabFadeInSec)
+      ? Math.max(0, station.cabFadeInSec)
+      : legacy;
+  const fadeOutSec =
+    station.cabFadeOutSec != null && Number.isFinite(station.cabFadeOutSec)
+      ? Math.max(0, station.cabFadeOutSec)
+      : legacy;
+  const overlapSec = Math.max(legacy, fadeInSec, fadeOutSec);
+  return { fadeInSec, fadeOutSec, overlapSec };
 }
 
 /**
  * Solape de fundido estándar (misma regla Cabina/encoder).
- * Acotado al 45 % de la pista útil; mínimo 0.35 s.
+ * Cero desactiva el solape. Los valores positivos se acotan al 45 % de la pista útil.
  */
 export function playSegmentCrossfadeOverlapSec(
   cueStartSec: number,
@@ -412,6 +446,7 @@ export function playSegmentCrossfadeOverlapSec(
   durationSec: number | null,
   configuredSec: number,
 ): number {
+  if (!Number.isFinite(configuredSec) || configuredSec <= 0) return 0;
   const start = Math.max(0, cueStartSec);
   const end =
     cueEndSec != null && Number.isFinite(cueEndSec) && cueEndSec > start + 0.2
@@ -420,7 +455,17 @@ export function playSegmentCrossfadeOverlapSec(
         ? durationSec
         : start + 30;
   const usable = Math.max(0.2, end - start);
-  return Math.min(Math.max(0.35, configuredSec), Math.max(0.35, usable * 0.45));
+  return Math.min(Math.max(0.35, configuredSec), usable * 0.45);
+}
+
+/** Acota un fade (in u out) a la pista útil — misma regla que el solape. */
+export function playSegmentFadeDurationSec(
+  cueStartSec: number,
+  cueEndSec: number | null,
+  durationSec: number | null,
+  configuredSec: number,
+): number {
+  return playSegmentCrossfadeOverlapSec(cueStartSec, cueEndSec, durationSec, configuredSec);
 }
 
 /** Construye el spec de segmento a partir del asset al aire + gains de estación. */
@@ -429,7 +474,12 @@ export function buildPlaySegmentSpec(
     ApiStationAsset,
     "id" | "path" | "cueStartSec" | "cueEndSec" | "durationSec" | "playbackGainDb"
   >,
-  station: { cabCrossfadeSec?: number | null; cabReferenceGainDb?: number | null },
+  station: {
+    cabCrossfadeSec?: number | null;
+    cabFadeInSec?: number | null;
+    cabFadeOutSec?: number | null;
+    cabReferenceGainDb?: number | null;
+  },
 ): ApiPlaySegmentSpec {
   const cueStartSec =
     asset.cueStartSec != null && Number.isFinite(asset.cueStartSec) && asset.cueStartSec > 0
@@ -445,6 +495,7 @@ export function buildPlaySegmentSpec(
   if (cueEndSec != null && asset.durationSec != null && asset.durationSec > 0) {
     cueEndSec = Math.min(cueEndSec, asset.durationSec);
   }
+  const fades = resolvePlaySegmentFades(station);
   return {
     assetId: asset.id,
     path: asset.path,
@@ -452,7 +503,9 @@ export function buildPlaySegmentSpec(
     cueEndSec: cueEndSec != null ? Math.round(cueEndSec * 1000) / 1000 : null,
     durationSec: asset.durationSec ?? null,
     playbackGainDb: asset.playbackGainDb ?? 0,
-    cabCrossfadeSec: station.cabCrossfadeSec ?? 4,
+    cabCrossfadeSec: fades.overlapSec,
+    cabFadeInSec: fades.fadeInSec,
+    cabFadeOutSec: fades.fadeOutSec,
     cabReferenceGainDb: station.cabReferenceGainDb ?? 0,
   };
 }
@@ -515,8 +568,14 @@ export interface ApiStation {
   lastAppliedScheduleBlockId?: string | null;
   /** Playlist volcada a cola (AutoDJ / última sync). */
   activePlaylistId?: string | null;
-  /** Segundos de solapamiento en el reproductor de referencia (cabina). */
+  /** Segundos de solapamiento / mix point en el reproductor de referencia (cabina). */
   cabCrossfadeSec?: number;
+  /** Fade-in de la pista entrante (s). */
+  cabFadeInSec?: number;
+  /** Fade-out de la pista saliente (s). */
+  cabFadeOutSec?: number;
+  /** Umbral Gap Killer (dBFS) para detección de Cue Start/End. */
+  cabSilenceThresholdDb?: number;
   /** Ganancia global del bus de referencia (dB). */
   cabReferenceGainDb?: number;
   /** Motor Web Audio (crossfade + nivelación); si false, un solo elemento audio. */
@@ -592,6 +651,9 @@ export interface ApiStationPatchBody {
   liveTitle?: string | null;
   autoScheduleEnabled?: boolean;
   cabCrossfadeSec?: number;
+  cabFadeInSec?: number;
+  cabFadeOutSec?: number;
+  cabSilenceThresholdDb?: number;
   cabReferenceGainDb?: number;
   cabWebAudioEngine?: boolean;
   dtmfActions?: Record<string, ApiDtmfAction>;

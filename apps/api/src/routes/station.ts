@@ -57,6 +57,10 @@ const patchStation = z.object({
   liveTitle: z.string().nullable().optional(),
   autoScheduleEnabled: z.boolean().optional(),
   cabCrossfadeSec: z.number().min(0).max(30).optional(),
+  cabFadeInSec: z.number().min(0).max(30).optional(),
+  cabFadeOutSec: z.number().min(0).max(30).optional(),
+  /** Gap Killer: típ. −60…−20 dBFS. */
+  cabSilenceThresholdDb: z.number().min(-80).max(-10).optional(),
   cabReferenceGainDb: z.number().min(-48).max(24).optional(),
   cabWebAudioEngine: z.boolean().optional(),
   dtmfActions: z.record(dtmfActionSchema).optional(),
@@ -312,6 +316,15 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
           ...(body.cabCrossfadeSec !== undefined && {
             cabCrossfadeSec: body.cabCrossfadeSec,
           }),
+          ...(body.cabFadeInSec !== undefined && {
+            cabFadeInSec: body.cabFadeInSec,
+          }),
+          ...(body.cabFadeOutSec !== undefined && {
+            cabFadeOutSec: body.cabFadeOutSec,
+          }),
+          ...(body.cabSilenceThresholdDb !== undefined && {
+            cabSilenceThresholdDb: body.cabSilenceThresholdDb,
+          }),
           ...(body.cabReferenceGainDb !== undefined && {
             cabReferenceGainDb: body.cabReferenceGainDb,
           }),
@@ -359,7 +372,7 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
     return reply.status(204).send();
   });
 
-  app.post("/station/skip", async (request, reply) => {
+  app.post<{ Reply: ApiStationState | ApiError }>("/station/skip", async (request, reply) => {
     if (!requireRoles(request, reply, ROLES_STATION_WRITE)) return;
     await ensureMainStation();
 
@@ -372,7 +385,8 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
       details: result.logDetails,
     });
 
-    return result.station;
+    // Misma forma que queue-from-playlist / queue-clear: estado con cola (smoke B4 + clientes).
+    return getStationState();
   });
 
   app.post("/station/air-quality-alert", async (request, reply) => {

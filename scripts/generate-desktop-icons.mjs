@@ -5,8 +5,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import pngToIco from "png-to-ico";
 import sharp from "sharp";
-import toIco from "to-ico";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const svgPath = path.join(root, "apps", "web", "public", "favicon.svg");
@@ -26,7 +26,7 @@ const icoSizes = [16, 24, 32, 48, 64, 128, 256];
 const pngBuffers = await Promise.all(
   icoSizes.map((size) => sharp(svg).resize(size, size, { fit: "contain" }).png().toBuffer()),
 );
-const ico = await toIco(pngBuffers);
+const ico = await pngToIco(pngBuffers);
 fs.writeFileSync(path.join(buildDir, "icon.ico"), ico);
 
 await sharp(svg).resize(1024, 1024, { fit: "contain" }).png().toFile(path.join(buildDir, "icon.png"));

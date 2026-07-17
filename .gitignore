@@ -22,10 +22,14 @@ coverage
 !apps/api/data/media/.gitkeep
 
 apps/desktop/.embedded-api/
+apps/desktop/.embedded-encoder/
+apps/desktop/.embedded-tools/
 apps/api/src/generated/
 apps/api/.data/
 apps/api/tmp-standalone-test.db
+apps/api/prisma/standalone/.data/
 apps/api/prisma/standalone/tmp*.db
+apps/api/playlists/*.m3u
 
 # Salida local: `npm run liquidsoap:gen-m3u -w @radioflow/api`
 # Certificados TLS locales (Nginx borde); ver docker/nginx/tls/README.md

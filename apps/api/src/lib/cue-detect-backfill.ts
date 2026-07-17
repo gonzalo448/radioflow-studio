@@ -35,6 +35,15 @@ export async function runCueDetectBackfillBatch(
   }
 
   const batchSize = Math.min(Math.max(opts?.batchSize ?? env.CUE_DETECT_BACKFILL_BATCH_SIZE, 1), 25);
+  const station = await prisma.station.findUnique({
+    where: { id: "main" },
+    select: { cabSilenceThresholdDb: true },
+  });
+  const silenceThresholdDb =
+    station?.cabSilenceThresholdDb != null && Number.isFinite(station.cabSilenceThresholdDb)
+      ? station.cabSilenceThresholdDb
+      : -40;
+
   const assets = await prisma.mediaAsset.findMany({
     where: {
       OR: [{ cueStartSec: null }, { cueEndSec: null }],
@@ -63,6 +72,7 @@ export async function runCueDetectBackfillBatch(
       const cues = await detectAndPersistTrackCues(prisma, env, asset, {
         force: true,
         fallbackOnFailure: true,
+        noiseDb: silenceThresholdDb,
         timeoutMs: Math.min(env.LIBRARY_PROCESS_FFMPEG_TIMEOUT_MS, 90_000),
       });
       if (cues) updated += 1;
@@ -101,14 +111,18 @@ export async function runCueDetectBackfillTick(env: Env): Promise<void> {
       return;
     }
 
+    // xact lock: el lock/unlock de sesión con pool de Prisma puede caer en
+    // conexiones distintas y dejar el candado tomado para siempre.
     const lockId = 915_000_088;
-    const got = await prisma.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_lock(${lockId}) AS locked`;
-    if (!got?.[0]?.locked) return;
-    try {
-      await run();
-    } finally {
-      await prisma.$executeRaw`SELECT pg_advisory_unlock(${lockId})`;
-    }
+    await prisma.$transaction(
+      async (tx) => {
+        const got = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(${lockId}) AS locked`;
+        if (!got?.[0]?.locked) return;
+        await run();
+      },
+      // Lote peor caso: 25 pistas × 90 s de FFmpeg cada una.
+      { maxWait: 5_000, timeout: 3_600_000 },
+    );
   } finally {
     cueBackfillBusy = false;
   }

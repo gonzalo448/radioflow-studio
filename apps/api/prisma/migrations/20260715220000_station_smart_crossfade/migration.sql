@@ -1,0 +1,6 @@
+-- Smart Crossfade Fase 1: fade in/out + umbral Gap Killer
+ALTER TABLE "Station" ALTER COLUMN "cabCrossfadeSec" SET DEFAULT 2;
+UPDATE "Station" SET "cabCrossfadeSec" = 2 WHERE "cabCrossfadeSec" = 4;
+ALTER TABLE "Station" ADD COLUMN IF NOT EXISTS "cabFadeInSec" DOUBLE PRECISION NOT NULL DEFAULT 2;
+ALTER TABLE "Station" ADD COLUMN IF NOT EXISTS "cabFadeOutSec" DOUBLE PRECISION NOT NULL DEFAULT 2;
+ALTER TABLE "Station" ADD COLUMN IF NOT EXISTS "cabSilenceThresholdDb" DOUBLE PRECISION NOT NULL DEFAULT -40;

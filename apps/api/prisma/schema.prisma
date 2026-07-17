@@ -295,7 +295,13 @@ model Station {
   autoDjActivePlaylistId     String?
   /** Cursor de ítems dentro de la playlist activa (cíclico). */
   autoDjPlaylistCursor       Int                  @default(0)
-  cabCrossfadeSec            Float                @default(4)
+  cabCrossfadeSec            Float                @default(2)
+  /** Fade-in de la pista entrante (s). Null histórico → usar cabCrossfadeSec. */
+  cabFadeInSec               Float                @default(2)
+  /** Fade-out de la pista saliente (s). */
+  cabFadeOutSec              Float                @default(2)
+  /** Umbral Gap Killer (dBFS) para silencedetect / Cue Start–End. */
+  cabSilenceThresholdDb      Float                @default(-40)
   cabReferenceGainDb         Float                @default(0)
   cabWebAudioEngine          Boolean              @default(true)
   /** JSON: mapa dígito DTMF → acción (RB-118). */

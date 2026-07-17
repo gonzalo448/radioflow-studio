@@ -20,6 +20,29 @@ const desktop = path.join(root, "apps", "desktop");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outputRel = path.join("dist-pack", `run-${runId}`);
 
+const requestedPlatform = winOnly ? "win32" : macOnly ? "darwin" : linuxOnly ? "linux" : process.platform;
+if (requestedPlatform !== process.platform) {
+  console.error(
+    `[pack] El artefacto ${requestedPlatform} debe construirse en ese sistema para incluir FFmpeg correcto; host actual: ${process.platform}.`,
+  );
+  process.exit(1);
+}
+
+const toolSuffix = process.platform === "win32" ? ".exe" : "";
+const stagedFiles = [
+  path.join(desktop, ".embedded-api", "dist", "index.js"),
+  path.join(desktop, ".embedded-encoder", "index.mjs"),
+  path.join(desktop, ".embedded-tools", `ffmpeg${toolSuffix}`),
+  path.join(desktop, ".embedded-tools", `ffprobe${toolSuffix}`),
+];
+for (const staged of stagedFiles) {
+  if (!fs.existsSync(staged)) {
+    console.error(`[pack] Falta recurso staged: ${staged}`);
+    console.error("[pack] Ejecutá el build desktop desde la raíz para preparar API, encoder y herramientas.");
+    process.exit(1);
+  }
+}
+
 const ensure = spawnSync(process.execPath, [path.join(root, "scripts", "ensure-electron-for-desktop.mjs")], {
   cwd: root,
   stdio: "inherit",

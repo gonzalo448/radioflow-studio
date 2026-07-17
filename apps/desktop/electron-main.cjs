@@ -31,7 +31,13 @@ if (!gotSingleInstanceLock) {
 }
 
 /** Misma carpeta que el instalador: %APPDATA%\\radioflow-studio (evita `@radioflow` en la ruta). */
-app.setPath("userData", nodePath.join(app.getPath("appData"), "radioflow-studio"));
+const overrideUserData = (process.env.RADIOFLOW_USER_DATA || "").trim();
+app.setPath(
+  "userData",
+  overrideUserData
+    ? nodePath.resolve(overrideUserData)
+    : nodePath.join(app.getPath("appData"), "radioflow-studio"),
+);
 
 /** API embebida: instalación empaquetada u opt-in en desarrollo. */
 function embeddedApiEnabled() {
@@ -127,6 +133,22 @@ async function waitApiReady(timeoutMs) {
   return false;
 }
 
+function ensureEmbeddedApiNodeModules(apiHome) {
+  const vendor = nodePath.join(apiHome, "vendor");
+  const nm = nodePath.join(apiHome, "node_modules");
+  if (!fssync.existsSync(vendor)) return;
+  try {
+    if (fssync.existsSync(nm)) {
+      const st = fssync.lstatSync(nm);
+      if (st.isSymbolicLink() || st.isDirectory()) return;
+    }
+    fssync.symlinkSync(vendor, nm, process.platform === "win32" ? "junction" : "dir");
+    console.log("[radioflow] API embebida: junction node_modules → vendor");
+  } catch (err) {
+    console.error("[radioflow] No se pudo enlazar vendor como node_modules:", err);
+  }
+}
+
 async function startEmbeddedApi() {
   const apiHome = resolveApiHome();
   const entry = nodePath.join(apiHome, "dist", "index.js");
@@ -134,6 +156,7 @@ async function startEmbeddedApi() {
     console.error("[radioflow] API embebida: no existe", entry);
     return false;
   }
+  ensureEmbeddedApiNodeModules(apiHome);
 
   const userData = app.getPath("userData");
   await fs.mkdir(userData, { recursive: true });
@@ -166,6 +189,8 @@ async function startEmbeddedApi() {
     /** Jobs de biblioteca (loudness, cues, trim, BPM audio) requieren FFmpeg/ffprobe. */
     AUDIO_FFMPEG_ENABLED: process.env.AUDIO_FFMPEG_ENABLED || "1",
     AUDIO_FFPROBE_ENABLED: process.env.AUDIO_FFPROBE_ENABLED || "1",
+    FFMPEG_PATH: resolveFfmpegPathForChild(),
+    FFPROBE_PATH: resolveFfprobePathForChild(),
   };
 
   apiChild = spawn(process.execPath, [entry], {
@@ -195,6 +220,13 @@ async function startEmbeddedApi() {
 }
 
 function resolveEncoderLaunch() {
+  if (app.isPackaged) {
+    const encoderRoot = nodePath.join(process.resourcesPath, "encoder");
+    const entryCjs = nodePath.join(encoderRoot, "index.cjs");
+    const entryMjs = nodePath.join(encoderRoot, "index.mjs");
+    const entry = fssync.existsSync(entryCjs) ? entryCjs : entryMjs;
+    return fssync.existsSync(entry) ? { encoderRoot, args: [entry] } : null;
+  }
   const encoderRoot = nodePath.join(__dirname, "..", "encoder");
   const entryTs = nodePath.join(encoderRoot, "src", "index.ts");
   if (!fssync.existsSync(entryTs)) {
@@ -205,14 +237,19 @@ function resolveEncoderLaunch() {
   if (!fssync.existsSync(tsxCli)) {
     return null;
   }
-  return { encoderRoot, tsxCli, entryTs };
+  return { encoderRoot, args: [tsxCli, entryTs] };
 }
 
-function resolveFfmpegPathForChild() {
-  if (process.env.FFMPEG_PATH?.trim()) return process.env.FFMPEG_PATH.trim();
+function resolveToolPathForChild(tool, envName) {
+  if (process.env[envName]?.trim()) return process.env[envName].trim();
+  if (app.isPackaged) {
+    const exe = process.platform === "win32" ? `${tool}.exe` : tool;
+    const bundled = nodePath.join(process.resourcesPath, "tools", exe);
+    if (fssync.existsSync(bundled)) return bundled;
+  }
   if (process.platform === "win32") {
     try {
-      const out = execFileSync("where.exe", ["ffmpeg"], {
+      const out = execFileSync("where.exe", [tool], {
         encoding: "utf8",
         windowsHide: true,
         stdio: ["ignore", "pipe", "ignore"],
@@ -225,9 +262,17 @@ function resolveFfmpegPathForChild() {
     } catch {
       /* */
     }
-    return "ffmpeg.exe";
+    return `${tool}.exe`;
   }
-  return "ffmpeg";
+  return tool;
+}
+
+function resolveFfmpegPathForChild() {
+  return resolveToolPathForChild("ffmpeg", "FFMPEG_PATH");
+}
+
+function resolveFfprobePathForChild() {
+  return resolveToolPathForChild("ffprobe", "FFPROBE_PATH");
 }
 
 function killProcessTree(pid) {
@@ -268,7 +313,7 @@ async function startEmbeddedEncoder(payload) {
   }
   const launch = resolveEncoderLaunch();
   if (!launch) {
-    return { running: false, pid: null, error: "Encoder no encontrado (instale dependencias del monorepo)." };
+    return { running: false, pid: null, error: "Encoder no encontrado en los recursos de la aplicación." };
   }
   const token = typeof payload?.token === "string" ? payload.token : "";
   if (!token) {
@@ -304,7 +349,7 @@ async function startEmbeddedEncoder(payload) {
     FFMPEG_PATH: resolveFfmpegPathForChild(),
   };
 
-  encoderChild = spawn(process.execPath, [launch.tsxCli, launch.entryTs], {
+  encoderChild = spawn(process.execPath, launch.args, {
     cwd: launch.encoderRoot,
     env: childEnv,
     stdio: ["ignore", "pipe", "pipe"],

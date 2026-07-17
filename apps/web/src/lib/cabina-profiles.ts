@@ -5,6 +5,9 @@ export type CabinaProfile = {
   label: string;
   description: string;
   cabCrossfadeSec: number;
+  cabFadeInSec: number;
+  cabFadeOutSec: number;
+  cabSilenceThresholdDb: number;
   cabReferenceGainDb: number;
 };
 
@@ -12,22 +15,31 @@ export const CABINA_PROFILES: CabinaProfile[] = [
   {
     id: "music",
     label: "Música continua",
-    description: "Fundido largo y nivel neutro para rotación musical.",
-    cabCrossfadeSec: 6,
+    description: "Smart Crossfade 2 s + Gap Killer −40 dB (recomendado).",
+    cabCrossfadeSec: 2,
+    cabFadeInSec: 2,
+    cabFadeOutSec: 2,
+    cabSilenceThresholdDb: -40,
     cabReferenceGainDb: 0,
   },
   {
     id: "talk",
     label: "Locución / talk",
-    description: "Fundido corto y refuerzo de voz para cabina en vivo.",
-    cabCrossfadeSec: 2,
+    description: "Fades cortos y refuerzo de voz para cabina en vivo.",
+    cabCrossfadeSec: 1,
+    cabFadeInSec: 0.5,
+    cabFadeOutSec: 1,
+    cabSilenceThresholdDb: -35,
     cabReferenceGainDb: 2,
   },
   {
     id: "night",
     label: "Noche suave",
-    description: "Transiciones largas y ganancia reducida.",
-    cabCrossfadeSec: 8,
+    description: "Transiciones un poco más largas y ganancia reducida.",
+    cabCrossfadeSec: 4,
+    cabFadeInSec: 3,
+    cabFadeOutSec: 4,
+    cabSilenceThresholdDb: -42,
     cabReferenceGainDb: -2,
   },
 ];

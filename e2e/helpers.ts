@@ -20,8 +20,9 @@ export async function registerFreshUser(request: APIRequestContext): Promise<{ e
 
 export async function loginThroughUi(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/login");
-  await page.getByPlaceholder("Correo").fill(email);
-  await page.getByPlaceholder("Contraseña").fill(password);
+  // LoginPage usa <label> sin placeholder.
+  await page.getByLabel("Correo").fill(email);
+  await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page).toHaveURL(/\/inicio\/?$/);
+  await expect(page).toHaveURL(/\/station\/?$/);
 }

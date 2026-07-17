@@ -31,7 +31,7 @@ jobs:
       NODE_ENV: test
       MEDIA_ROOT: data/media/ci
       SMOKE_PROMOTE_TO_EDITOR: "1"
-      RATE_LIMIT_AUTH_MAX: "8"
+      RATE_LIMIT_AUTH_MAX: "12"
       RATE_LIMIT_AUTH_WINDOW_SEC: "300"
 
     steps:
@@ -47,6 +47,12 @@ jobs:
 
       - name: npm audit (0 critical)
         run: node scripts/ci-verify-npm-audit.mjs
+
+      - name: npm audit production (0 critical/high)
+        run: node scripts/ci-verify-npm-audit.mjs
+        env:
+          NPM_AUDIT_OMIT_DEV: "1"
+          NPM_AUDIT_MAX_HIGH: "0"
 
       - name: Check UTF-8
         run: npm run check:utf8
@@ -93,7 +99,7 @@ jobs:
           cd ../..
           ( cd apps/api && node dist/index.js ) &
           API_PID=$!
-          ( cd apps/web && cross-env VITE_ALLOW_WEB_PANEL=true npx vite --host 127.0.0.1 --port 5173 --strictPort ) &
+          ( cd apps/web && VITE_ALLOW_WEB_PANEL=true npx vite --host 127.0.0.1 --port 5173 --strictPort ) &
           WEB_PID=$!
           cleanup() {
             kill -TERM -"$WEB_PID" 2>/dev/null || true
@@ -113,7 +119,22 @@ jobs:
             sleep 1
           done
           npx wait-on -t 120000 tcp:127.0.0.1:5173
-          SMOKE_RATE_LIMIT_PROBE=1 SMOKE_EXPECT_AUTH_MAX=8 node scripts/smoke-api.mjs
+          SMOKE_RATE_LIMIT_PROBE=1 SMOKE_EXPECT_AUTH_MAX=12 node scripts/smoke-api.mjs
+          # El probe de rate-limit satura la ventana en memoria: reiniciar API antes del E2E.
+          kill -TERM -"$API_PID" 2>/dev/null || true
+          wait "$API_PID" 2>/dev/null || true
+          ( cd apps/api && node dist/index.js ) &
+          API_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4000/api/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "API no respondió tras reinicio post-smoke"
+              exit 1
+            fi
+            sleep 1
+          done
           npx playwright install chromium --with-deps
           CI=true npm run test:e2e
 
@@ -126,6 +147,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
 
       - name: Install FFmpeg
         run: |
@@ -173,6 +198,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
 
       - name: Desktop backup/restore selftest
         run: npm run backup:desktop:selftest
