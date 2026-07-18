@@ -71,11 +71,15 @@ describe("Smart Crossfade", () => {
     assert.notEqual(playSegmentKey(segment, overlay), playSegmentKey({ ...segment, cabFadeInSec: 1 }, overlay));
   });
 
-  it("detecta spots por género o por duración corta", () => {
+  it("detecta spots por género o ruta, no solo por duración corta", () => {
     assert.equal(isSpotLikeAsset({ genre: "Jingle Salsa", durationSec: 4 }), true);
     assert.equal(isSpotLikeAsset({ genre: "Jingles Salsa", durationSec: 3 }), true);
     assert.equal(isSpotLikeAsset({ genre: "time-announce", durationSec: null }), true);
-    assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: 12 }), true);
+    assert.equal(
+      isSpotLikeAsset({ genre: null, path: "uploads/Jingles Salsa/id.mp3", durationSec: 4 }),
+      true,
+    );
+    assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: 12 }), false);
     assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: 240 }), false);
     assert.equal(isSpotLikeAsset({ genre: "Salsa", durationSec: null }), false);
     assert.equal(isSpotLikeAsset(null), false);

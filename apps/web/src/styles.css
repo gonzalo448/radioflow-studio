@@ -2570,6 +2570,12 @@ a.ghost-link:hover {
   border: 1px solid var(--border, #334155);
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface, #0f172a) 88%, var(--accent, #38bdf8));
+  flex-shrink: 0;
+}
+
+.rb-pl-toolbar-hint {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .rb-pl-toolbar--meta {

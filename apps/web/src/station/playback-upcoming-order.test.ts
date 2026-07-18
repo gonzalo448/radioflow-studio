@@ -29,7 +29,7 @@ function trackRow(
 describe("jingles de playlist como spots", () => {
   const song = trackRow("song", { genre: "Salsa", durationSec: 240 });
   const jingle = trackRow("jingle", { genre: "Jingle Salsa", durationSec: 4 });
-  const shortId = trackRow("id-corto", { genre: null, durationSec: 8 });
+  const shortId = trackRow("id-corto", { genre: "Jingle", durationSec: 8 });
 
   it("una pista corta o con género Jingle es spot", () => {
     expect(isAnnounceOrDeferredQueueRow(jingle)).toBe(true);
