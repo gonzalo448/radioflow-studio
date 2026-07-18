@@ -437,6 +437,34 @@ export function resolvePlaySegmentFades(station: {
 }
 
 /**
+ * Piezas tipo spot (jingles, locuciones, IDs, sweepers): deben sonar completas,
+ * sin crossfade encima de la canción anterior ni fundidos que se coman su inicio/fin.
+ *
+ * Criterio: género o ruta típicos de spot. NO usar solo “duración corta”:
+ * hay pistas de música mal etiquetadas o recortes ≤30 s que no son spots.
+ */
+export function isSpotLikeAsset(
+  asset:
+    | {
+        genre?: string | null;
+        path?: string | null;
+        durationSec?: number | null;
+        cueStartSec?: number | null;
+        cueEndSec?: number | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!asset) return false;
+  const g = (asset.genre ?? "").trim().toLowerCase();
+  if (g === "time-announce" || g === "station-intro" || g === "jingle-auto") return true;
+  if (/jingle|locuci|sweeper|cu[nñ]a/.test(g)) return true;
+  const path = (asset.path ?? "").replace(/\\/g, "/").toLowerCase();
+  if (/\/(jingles?|time-announce|station-intro|sweepers?|cu[nñ]as?)\b/.test(path)) return true;
+  return false;
+}
+
+/**
  * Solape de fundido estándar (misma regla Cabina/encoder).
  * Cero desactiva el solape. Los valores positivos se acotan al 45 % de la pista útil.
  */
@@ -473,7 +501,7 @@ export function buildPlaySegmentSpec(
   asset: Pick<
     ApiStationAsset,
     "id" | "path" | "cueStartSec" | "cueEndSec" | "durationSec" | "playbackGainDb"
-  >,
+  > & { genre?: string | null },
   station: {
     cabCrossfadeSec?: number | null;
     cabFadeInSec?: number | null;
@@ -495,7 +523,11 @@ export function buildPlaySegmentSpec(
   if (cueEndSec != null && asset.durationSec != null && asset.durationSec > 0) {
     cueEndSec = Math.min(cueEndSec, asset.durationSec);
   }
-  const fades = resolvePlaySegmentFades(station);
+  // Spots (jingles/locuciones): suenan completos, sin mix ni fades que se coman inicio/fin.
+  const spot = isSpotLikeAsset(asset);
+  const fades = spot
+    ? { fadeInSec: 0, fadeOutSec: 0, overlapSec: 0 }
+    : resolvePlaySegmentFades(station);
   return {
     assetId: asset.id,
     path: asset.path,

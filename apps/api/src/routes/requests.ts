@@ -16,6 +16,7 @@ import { getClientIp } from "../lib/rate-limit.js";
 import { assertAssetPlayableInVault } from "../lib/library-vault.js";
 import { consumeSongRequestSubmitBudget } from "../lib/song-request-rate-limit.js";
 import { assertSongRequestNotDuplicate, SongRequestRepeatError } from "../lib/song-request-repeat-guard.js";
+import { containsCi } from "../lib/prisma-string-filter.js";
 import { writePlayLog } from "../lib/play-log.js";
 import { ensureMainStation, getStationState, MAIN_STATION_ID } from "../services/station-state.js";
 
@@ -103,8 +104,8 @@ export const requestsRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
       const rows = await prisma.mediaAsset.findMany({
         where: {
           OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { artist: { contains: q, mode: "insensitive" } },
+            { title: containsCi(q) },
+            { artist: containsCi(q) },
           ],
         },
         orderBy: { title: "asc" },

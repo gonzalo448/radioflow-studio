@@ -32,6 +32,7 @@
     },
     "files": [
       "electron-main.cjs",
+      "encoder-watchdog.cjs",
       "auto-updater.cjs",
       "preload.cjs",
       "cab-meter-hud.html",

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { equalsCi } from "../lib/prisma-string-filter.js";
 import { prisma } from "../db.js";
 import type { Env } from "../config.js";
 import { assertAssetPlayableInVault } from "../lib/library-vault.js";
@@ -169,7 +170,7 @@ function buildWhere(input: PlaylistGeneratorInput): Prisma.MediaAssetWhereInput 
   const clauses: Prisma.MediaAssetWhereInput[] = [];
   if (genres.length > 0) {
     clauses.push({
-      OR: genres.map((genre) => ({ genre: { equals: genre, mode: "insensitive" as const } })),
+      OR: genres.map((genre) => ({ genre: equalsCi(genre) })),
     });
   }
   if (prefixes.length > 0) {
@@ -183,13 +184,13 @@ function buildWhere(input: PlaylistGeneratorInput): Prisma.MediaAssetWhereInput 
 
 function whereForCategoryRule(rule: PlaylistCategoryRule): Prisma.MediaAssetWhereInput {
   if (rule.kind === "genre") {
-    return { genre: { equals: rule.value.trim(), mode: "insensitive" } };
+    return { genre: equalsCi(rule.value.trim()) };
   }
   if (rule.kind === "artist") {
     if (rule.value === "__none__") {
       return { OR: [{ artist: null }, { artist: "" }] };
     }
-    return { artist: { equals: rule.value.trim(), mode: "insensitive" } };
+    return { artist: equalsCi(rule.value.trim()) };
   }
   const prefix = rule.value.trim().replace(/\\/g, "/");
   return { path: { startsWith: prefix.endsWith("/") ? prefix : `${prefix}/` } };

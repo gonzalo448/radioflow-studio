@@ -368,7 +368,7 @@ export const stationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts)
 
   app.post("/station/playout-heartbeat", async (request, reply) => {
     const body = playoutHeartbeatBody.parse(request.body ?? {});
-    touchPlayoutClientHeartbeat(body.playing !== false);
+    touchPlayoutClientHeartbeat(body.playing !== false, body.currentSec);
     return reply.status(204).send();
   });
 

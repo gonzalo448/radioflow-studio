@@ -20,7 +20,7 @@ import { STATION_PLAY_REQUEST_EVENT } from "../lib/local-audio-import";
 import { sendPlayoutHeartbeat } from "../lib/playout-heartbeat";
 import { parseCmdQueueLabel } from "../lib/playlist-cmd-spec";
 import { useStationLive } from "./StationLiveContext";
-import { resolvePlaySegmentFades } from "@radioflow/shared";
+import { isSpotLikeAsset, resolvePlaySegmentFades } from "@radioflow/shared";
 import {
   CabReferencePlayer,
   type CabBusMeterFrame,
@@ -195,6 +195,8 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
     airCuesAsset?.genre === "time-announce" ||
     airCuesAsset?.genre === "station-intro" ||
     airCuesAsset?.genre === "jingle-auto";
+  /** Jingle/spot al aire (aunque venga como pista normal): sale completo, sin fundido de salida. */
+  const airIsSpot = airIsAnnounce || isSpotLikeAsset(airCuesAsset);
   // Preferir contrato PlaySegmentSpec (A1) cuando la API lo envía; misma ventana que el encoder.
   const playSeg = state?.playSegment ?? state?.nowPlayingInfo?.playSegment ?? null;
   const airCueStart = airIsAnnounce
@@ -214,7 +216,7 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
   // Con locución/intro/jingle a continuación: corte duro al terminar (0), sin mezclar.
   // Con voice track bridge: XF normal off (el solape lo hace el overlay VT).
   const xfDisabled =
-    airIsAnnounce || spotNext || nextAirAssetId == null || Boolean(voiceTrackBridgePlan);
+    airIsSpot || spotNext || nextAirAssetId == null || Boolean(voiceTrackBridgePlan);
   const cabCrossfadeSec = xfDisabled ? 0 : stationFades.overlapSec;
   const cabFadeInSec = xfDisabled ? 0 : stationFades.fadeInSec;
   const cabFadeOutSec = xfDisabled ? 0 : stationFades.fadeOutSec;
@@ -449,18 +451,17 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     if (!token) return;
-    // C1 listen-through: siempre marcar playing para que headless no compita con encoder EOF.
-    const forcePlayingForAirClock = listenThroughActive;
-    if (!forcePlayingForAirClock && !airAssetId) return;
+    // Presencia de UI: siempre latir mientras hay sesión (aunque no haya pista o esté en pausa).
+    // Evita que headless tome el mando al navegar a Biblioteca o al cargar audio.
     const tick = () => {
-      if (forcePlayingForAirClock) {
+      if (listenThroughActive) {
         sendPlayoutHeartbeat(token, {
           queueItemId: currentQueueItemId ?? undefined,
           playing: true,
         });
         return;
       }
-      const el = getLeadAudio();
+      const el = airAssetId ? getLeadAudio() : null;
       const playing = el ? !el.paused && !el.ended : false;
       sendPlayoutHeartbeat(token, {
         queueItemId: currentQueueItemId ?? undefined,
@@ -469,7 +470,7 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
       });
     };
     tick();
-    const interval = window.setInterval(tick, 4000);
+    const interval = window.setInterval(tick, 3_000);
     return () => window.clearInterval(interval);
   }, [airAssetId, currentQueueItemId, getLeadAudio, listenThroughActive, token]);
 

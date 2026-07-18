@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
 import { getOrCreateSettings } from "../services/app-settings.js";
+import { equalsCi } from "./prisma-string-filter.js";
 
 export class SongRequestRepeatError extends Error {
   constructor(message: string) {
@@ -25,7 +26,7 @@ export async function assertSongRequestNotDuplicate(opts: {
     const since = new Date(Date.now() - titleMin * 60_000);
     const dup = await prisma.songRequest.findFirst({
       where: {
-        title: { equals: title, mode: "insensitive" },
+        title: equalsCi(title),
         createdAt: { gte: since },
         status: { not: "rejected" },
       },
@@ -42,7 +43,7 @@ export async function assertSongRequestNotDuplicate(opts: {
     const since = new Date(Date.now() - artistMin * 60_000);
     const dup = await prisma.songRequest.findFirst({
       where: {
-        artist: { equals: artist, mode: "insensitive" },
+        artist: equalsCi(artist),
         createdAt: { gte: since },
         status: { not: "rejected" },
       },

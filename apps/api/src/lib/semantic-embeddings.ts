@@ -2,6 +2,7 @@ import type { MediaAsset } from "@prisma/client";
 import type { Env } from "../config.js";
 import { prisma } from "../db.js";
 import { mediaAssetWhereFromLibraryFilters, type LibraryAssetListFilters } from "./library-list-filters.js";
+import { containsCi } from "./prisma-string-filter.js";
 import { isPgVectorSemanticEnabled, saveAssetEmbeddingPg, searchAssetsByPgVector } from "./pgvector-semantic.js";
 
 export type StoredEmbedding = {
@@ -143,10 +144,10 @@ export async function semanticSearchAssets(
   const textWhere = {
     ...where,
     OR: [
-      { title: { contains: query, mode: "insensitive" as const } },
-      { artist: { contains: query, mode: "insensitive" as const } },
-      { album: { contains: query, mode: "insensitive" as const } },
-      { semanticNote: { contains: query, mode: "insensitive" as const } },
+      { title: containsCi(query) },
+      { artist: containsCi(query) },
+      { album: containsCi(query) },
+      { semanticNote: containsCi(query) },
     ],
   };
 

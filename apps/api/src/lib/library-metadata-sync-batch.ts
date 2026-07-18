@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import type { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
+import { containsCi, equalsCi } from "./prisma-string-filter.js";
 import type { ApiLibraryProcessSyncMetadataResult } from "@radioflow/shared";
 import type { Env } from "../config.js";
 import { enrichMediaAssetFromAudioFile } from "./id3-enrich-asset.js";
@@ -34,17 +35,17 @@ export function buildMediaAssetWhere(filters: MetadataSyncFilters): Prisma.Media
     ...(q
       ? {
           OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { artist: { contains: q, mode: "insensitive" } },
-            { album: { contains: q, mode: "insensitive" } },
+            { title: containsCi(q) },
+            { artist: containsCi(q) },
+            { album: containsCi(q) },
           ],
         }
       : {}),
-    ...(genre ? { genre: { equals: genre, mode: "insensitive" } } : {}),
+    ...(genre ? { genre: equalsCi(genre) } : {}),
     ...(artist === "__none__"
       ? { OR: [{ artist: null }, { artist: "" }] }
       : artist
-        ? { artist: { equals: artist, mode: "insensitive" } }
+        ? { artist: equalsCi(artist) }
         : {}),
     ...(pathPrefix ? { path: { startsWith: pathPrefix } } : {}),
   };

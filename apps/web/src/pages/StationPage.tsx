@@ -1516,6 +1516,24 @@ export function StationPage() {
               </button>
               <button
                 type="button"
+                className="btn btn-compact"
+                disabled={plBusy || selectedPlItemIds.length === 0}
+                onClick={() => void removeManyPlItems(selectedPlItemIds)}
+                title="Quitar las pistas seleccionadas de la lista"
+              >
+                Eliminar
+              </button>
+              <button
+                type="button"
+                className="btn btn-compact"
+                disabled={plBusy || !undoStack.canUndo}
+                onClick={() => void undoStack.undo(activePlRef.current, () => loadActivePlaylist(plPick))}
+                title="Deshacer último cambio en la lista"
+              >
+                Deshacer
+              </button>
+              <button
+                type="button"
                 className="btn primary btn-compact"
                 disabled={!canOperate || !activePlDetail || !playlistHasAirContent(activePlDetail.items) || plBusy}
                 onClick={() => void playPlaylistFromIndex(selectedRowIdx ?? 0)}
@@ -1523,6 +1541,9 @@ export function StationPage() {
               >
                 {plBusy ? "…" : "Reproducir"}
               </button>
+              <span className="rb-pl-toolbar-hint muted small" title="Más acciones en el menú superior">
+                Más en menú Lista / Edición
+              </span>
             </div>
           ) : null}
 

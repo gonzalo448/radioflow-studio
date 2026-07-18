@@ -1,0 +1,24 @@
+---
+description: Invariantes de aire estable — encoder, headless y cabina no deben pelearse
+globs: apps/desktop/**/*,apps/web/src/hooks/useAutoResumeEncoder*,apps/web/src/station/StationAirPlaybackContext*,apps/api/src/services/headless-playout*,apps/api/src/config.ts
+alwaysApply: false
+---
+
+# Aire estable (desktop + cabina)
+
+Regresiones ya sufridas: zumbido sin encoder, canciones que saltan solas, botones de playlist recortados.
+
+## Invariantes (no romper)
+
+1. **Desktop embebido (`EMBEDDED_STANDALONE`)**: `HEADLESS_PLAYOUT_POLL_MS` debe ser **0** salvo override explícito. La UI gobierna el avance; headless no compite.
+2. **Heartbeat de cabina**: con sesión iniciada, latir siempre (aunque el audio esté en pausa o no haya pista). Presencia de UI ≠ `playing`.
+3. **Encoder en Electron**: `wantRunning` + watchdog de reinicio tras exit. `stop` solo cancela si el usuario lo apaga. No dejar `encoderChild = null` sin programar reinicio si `wantRunning`.
+4. **UI watchdog** (`useAutoResumeEncoder`): periódicamente asegura encoder running si hay destino de streaming y sesión.
+5. **Spots (jingles/locuciones)**: detectar por género/ruta, **no** solo por duración corta.
+6. **Toolbar playlist** (`.rb-pl-toolbar`): siempre `flex-shrink: 0` dentro de `.rb-col-center` con `overflow: hidden`.
+
+## Al cambiar código
+
+- Tras tocar encoder/headless/heartbeat: `node --test apps/desktop/encoder-watchdog.test.cjs` y tests de shared/web relacionados.
+- No matar el encoder de Electron “para probar” sin dejar el watchdog o `useAutoResumeEncoder` que lo recupere.
+- No reintroducir `mode: "insensitive"` de Prisma sin `containsCi`/`equalsCi` (SQLite desktop → 500).

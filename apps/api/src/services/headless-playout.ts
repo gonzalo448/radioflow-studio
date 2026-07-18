@@ -1,5 +1,6 @@
 import type { Env } from "../config.js";
 import type { QueueEntryKind } from "@radioflow/shared";
+import { isSpotLikeAsset } from "@radioflow/shared";
 import { prisma } from "../db.js";
 import { logAutomation } from "../lib/automation-log.js";
 import {
@@ -28,15 +29,27 @@ const PROBE_CACHE_TTL_MS = 5 * 60_000;
 const PROBE_NEGATIVE_TTL_MS = 60_000;
 
 let lastClientHeartbeatMs = 0;
+/** Última posición reportada por la UI (s); sirve al ceder el reloj al headless. */
+let lastClientCurrentSec: number | null = null;
+/** El tick anterior lo gobernaba la UI: al pasar a headless hay que anclar el reloj de nuevo. */
+let lastTickWasClient = false;
 let segmentAnchor: { queueItemId: string; startedAtMs: number; loggedUnknown?: boolean } | null =
   null;
 
-export function touchPlayoutClientHeartbeat(playing = true): void {
-  if (playing) lastClientHeartbeatMs = Date.now();
+/** Presencia de cliente UI (cualquier heartbeat). `playing` ya no condiciona el stale. */
+export function touchPlayoutClientHeartbeat(
+  _playing = true,
+  currentSec?: number | null,
+): void {
+  lastClientHeartbeatMs = Date.now();
+  if (currentSec != null && Number.isFinite(currentSec) && currentSec >= 0) {
+    lastClientCurrentSec = currentSec;
+  }
 }
 
 export function resetHeadlessPlayoutSegment(): void {
   segmentAnchor = null;
+  lastClientCurrentSec = null;
 }
 
 export function headlessPlayoutStatus(env: Env): {
@@ -107,7 +120,7 @@ async function resolveSegmentNeed(
     cueEndSec?: number | null;
   } | null,
   crossfadeSec: number,
-  nextIsSpot: boolean,
+  noOverlap: boolean,
   vtIsBridged: boolean,
 ): Promise<SegmentNeed | null> {
   if (
@@ -158,7 +171,7 @@ async function resolveSegmentNeed(
   }
 
   return {
-    needSec: applyCrossfadeToSegmentNeed(playable, crossfadeSec, nextIsSpot),
+    needSec: applyCrossfadeToSegmentNeed(playable, crossfadeSec, noOverlap),
     source,
   };
 }
@@ -182,14 +195,23 @@ export async function runHeadlessPlayoutTick(env: Env): Promise<void> {
 
   const clientActive = Date.now() - lastClientHeartbeatMs < env.HEADLESS_PLAYOUT_CLIENT_STALE_MS;
   if (clientActive) {
+    lastTickWasClient = true;
     if (segmentAnchor?.queueItemId !== currentQueueEntry.id) {
       segmentAnchor = { queueItemId: currentQueueEntry.id, startedAtMs: Date.now() };
     }
     return;
   }
 
-  if (segmentAnchor?.queueItemId !== currentQueueEntry.id) {
-    segmentAnchor = { queueItemId: currentQueueEntry.id, startedAtMs: Date.now() };
+  // Al ceder de UI → headless: no reutilizar el ancla de cuando la UI estaba al mando
+  // (elapsed ya consumido → skip inmediato / canciones “saltando”).
+  if (segmentAnchor?.queueItemId !== currentQueueEntry.id || lastTickWasClient) {
+    const offsetSec = Math.max(0, lastClientCurrentSec ?? 0);
+    segmentAnchor = {
+      queueItemId: currentQueueEntry.id,
+      startedAtMs: Date.now() - offsetSec * 1000,
+    };
+    lastTickWasClient = false;
+    lastClientCurrentSec = null;
   }
 
   const kind = currentQueueEntry.kind as QueueEntryKind;
@@ -201,10 +223,10 @@ export async function runHeadlessPlayoutTick(env: Env): Promise<void> {
       (nextRow.kind === "time_announce" ||
         nextRow.kind === "station_intro" ||
         nextRow.kind === "jingle_auto" ||
-        nextRow.asset?.genre === "time-announce" ||
-        nextRow.asset?.genre === "station-intro" ||
-        nextRow.asset?.genre === "jingle-auto"),
+        isSpotLikeAsset(nextRow.asset)),
   );
+  /** Un spot al aire (jingle/locución) suena completo: sin adelantar el skip. */
+  const currentIsSpot = kind === "track" && isSpotLikeAsset(currentQueueEntry.asset);
   const vtIsBridged =
     kind === "voicetrack" &&
     Boolean(prevRow && prevRow.kind === "track" && prevRow.asset) &&
@@ -224,7 +246,7 @@ export async function runHeadlessPlayoutTick(env: Env): Promise<void> {
         }
       : null,
     crossfade,
-    nextIsSpot,
+    nextIsSpot || currentIsSpot,
     vtIsBridged,
   );
   if (!resolved) return;
