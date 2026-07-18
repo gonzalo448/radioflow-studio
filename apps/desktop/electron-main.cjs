@@ -46,6 +46,47 @@ function embeddedApiEnabled() {
 
 let apiChild = null;
 let encoderChild = null;
+/** Último payload de arranque (para reinicio automático). */
+let lastEncoderPayload = null;
+/** El usuario quiere el encoder al aire (no lo apagó a propósito). */
+let encoderWantRunning = false;
+let encoderRestartAttempts = 0;
+let encoderRestartTimer = null;
+const {
+  shouldScheduleEncoderRestart,
+  encoderRestartDelayMs,
+  onEncoderStartSuccess,
+  onEncoderStoppedByUser,
+  onEncoderExited,
+} = require("./encoder-watchdog.cjs");
+
+function clearEncoderRestartTimer() {
+  if (encoderRestartTimer) {
+    clearTimeout(encoderRestartTimer);
+    encoderRestartTimer = null;
+  }
+}
+
+function scheduleEncoderRestart(reason) {
+  const state = {
+    wantRunning: encoderWantRunning,
+    running: Boolean(encoderChild && !encoderChild.killed),
+    restartAttempts: encoderRestartAttempts,
+    lastExitAtMs: Date.now(),
+  };
+  if (!shouldScheduleEncoderRestart(state) || !lastEncoderPayload) return;
+  clearEncoderRestartTimer();
+  const delay = encoderRestartDelayMs(encoderRestartAttempts);
+  console.log(
+    `[radioflow] encoder: reinicio automático en ${delay}ms (${reason}, intento ${encoderRestartAttempts + 1})`,
+  );
+  encoderRestartTimer = setTimeout(() => {
+    encoderRestartTimer = null;
+    if (!encoderWantRunning || !lastEncoderPayload) return;
+    if (encoderChild && !encoderChild.killed) return;
+    void startEmbeddedEncoder(lastEncoderPayload, { fromWatchdog: true });
+  }, delay);
+}
 let embeddedApiOrigin = null;
 
 function embeddedApiPort() {
@@ -176,6 +217,11 @@ async function startEmbeddedApi() {
     JWT_SECRET: jwtSecret,
     PORT: process.env.RADIOFLOW_API_PORT || "4000",
     EMBEDDED_STANDALONE: "1",
+    /**
+     * Desktop siempre tiene cabina/UI: el headless no debe avanzar la cola
+     * (evita skips en cadena cuando el audio pausa o cambia de módulo).
+     */
+    HEADLESS_PLAYOUT_POLL_MS: process.env.HEADLESS_PLAYOUT_POLL_MS ?? "0",
     LIBRARY_INGEST_MODE: "copy",
     CORS_ORIGIN: "http://127.0.0.1:5173,http://127.0.0.1:5174,null",
     REDIS_URL: "",
@@ -292,6 +338,16 @@ function killProcessTree(pid) {
 }
 
 function stopEmbeddedEncoder() {
+  clearEncoderRestartTimer();
+  const next = onEncoderStoppedByUser({
+    wantRunning: encoderWantRunning,
+    running: Boolean(encoderChild && !encoderChild.killed),
+    restartAttempts: encoderRestartAttempts,
+    lastExitAtMs: null,
+  });
+  encoderWantRunning = next.wantRunning;
+  encoderRestartAttempts = next.restartAttempts;
+  lastEncoderPayload = null;
   if (!encoderChild || encoderChild.killed) {
     encoderChild = null;
     return { running: false, pid: null };
@@ -307,9 +363,21 @@ function stopEmbeddedEncoder() {
   return { running: false, pid: null };
 }
 
-async function startEmbeddedEncoder(payload) {
+/**
+ * @param {object} payload
+ * @param {{ fromWatchdog?: boolean }} [opts]
+ */
+async function startEmbeddedEncoder(payload, opts = {}) {
   if (encoderChild && !encoderChild.killed) {
-    stopEmbeddedEncoder();
+    // Reinicio limpio sin cancelar wantRunning
+    const pid = encoderChild.pid;
+    try {
+      encoderChild.kill("SIGTERM");
+    } catch {
+      /* */
+    }
+    killProcessTree(pid);
+    encoderChild = null;
   }
   const launch = resolveEncoderLaunch();
   if (!launch) {
@@ -325,6 +393,18 @@ async function startEmbeddedEncoder(payload) {
       : getEmbeddedApiOrigin();
   const userData = app.getPath("userData");
   const mediaRoot = nodePath.join(userData, "media");
+
+  lastEncoderPayload = {
+    token,
+    apiOrigin,
+    icecastAdminUser: payload?.icecastAdminUser,
+    icecastAdminPassword: payload?.icecastAdminPassword,
+  };
+  encoderWantRunning = true;
+  if (!opts.fromWatchdog) {
+    encoderRestartAttempts = 0;
+    clearEncoderRestartTimer();
+  }
 
   const childEnv = {
     ...process.env,
@@ -366,9 +446,30 @@ async function startEmbeddedEncoder(payload) {
   encoderChild.on("error", (err) => {
     console.error("[radioflow] encoder spawn error:", err);
   });
-  encoderChild.on("exit", () => {
+  encoderChild.on("exit", (code, signal) => {
     encoderChild = null;
+    const next = onEncoderExited({
+      wantRunning: encoderWantRunning,
+      running: true,
+      restartAttempts: encoderRestartAttempts,
+      lastExitAtMs: null,
+    });
+    encoderRestartAttempts = next.restartAttempts;
+    console.log(
+      `[radioflow] encoder salió code=${code ?? "null"} signal=${signal ?? "null"} want=${encoderWantRunning}`,
+    );
+    if (encoderWantRunning) {
+      scheduleEncoderRestart(`exit ${code ?? signal ?? "?"}`);
+    }
   });
+
+  const started = onEncoderStartSuccess({
+    wantRunning: encoderWantRunning,
+    running: false,
+    restartAttempts: encoderRestartAttempts,
+    lastExitAtMs: null,
+  });
+  encoderRestartAttempts = started.restartAttempts;
 
   return { running: true, pid: encoderChild.pid ?? null };
 }
@@ -377,6 +478,8 @@ function embeddedEncoderStatus() {
   return {
     running: Boolean(encoderChild && !encoderChild.killed),
     pid: encoderChild && !encoderChild.killed ? encoderChild.pid ?? null : null,
+    wantRunning: encoderWantRunning,
+    restartAttempts: encoderRestartAttempts,
   };
 }
 

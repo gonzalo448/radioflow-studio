@@ -451,18 +451,17 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     if (!token) return;
-    // C1 listen-through: siempre marcar playing para que headless no compita con encoder EOF.
-    const forcePlayingForAirClock = listenThroughActive;
-    if (!forcePlayingForAirClock && !airAssetId) return;
+    // Presencia de UI: siempre latir mientras hay sesión (aunque no haya pista o esté en pausa).
+    // Evita que headless tome el mando al navegar a Biblioteca o al cargar audio.
     const tick = () => {
-      if (forcePlayingForAirClock) {
+      if (listenThroughActive) {
         sendPlayoutHeartbeat(token, {
           queueItemId: currentQueueItemId ?? undefined,
           playing: true,
         });
         return;
       }
-      const el = getLeadAudio();
+      const el = airAssetId ? getLeadAudio() : null;
       const playing = el ? !el.paused && !el.ended : false;
       sendPlayoutHeartbeat(token, {
         queueItemId: currentQueueItemId ?? undefined,
@@ -471,7 +470,7 @@ export function StationAirPlaybackProvider({ children }: { children: ReactNode }
       });
     };
     tick();
-    const interval = window.setInterval(tick, 4000);
+    const interval = window.setInterval(tick, 3_000);
     return () => window.clearInterval(interval);
   }, [airAssetId, currentQueueItemId, getLeadAudio, listenThroughActive, token]);
 

@@ -8,6 +8,8 @@ import {
   startLocalEncoder,
 } from "../lib/broadcast-encoder";
 
+const WATCHDOG_MS = 12_000;
+
 function readAdminMeta() {
   try {
     return {
@@ -20,37 +22,36 @@ function readAdminMeta() {
 }
 
 /**
- * En escritorio: si ya hay destino Icecast/AzuraCast guardado, activa emisión
- * y arranca el encoder al iniciar sesión — sin pasar por Emitir ni pulsar botones.
- *
- * Nota: no marcar el intento como definitivo hasta éxito o fallo terminal,
- * para sobrevivir al double-mount de React Strict Mode y a reinicios de la API.
+ * Escritorio: arranca el encoder al iniciar sesión y lo vigila.
+ * Si se cae (reinicio de API, crash FFmpeg, kill accidental), lo vuelve a levantar.
  */
 export function useAutoResumeEncoder() {
   const { token, user } = useAuth();
-  const successRef = useRef(false);
   const inFlightRef = useRef(false);
+  const enabledRef = useRef(false);
 
   useEffect(() => {
-    if (successRef.current || inFlightRef.current) return;
-    if (!token || !user) return;
+    if (!token || !user) {
+      enabledRef.current = false;
+      return;
+    }
     if (!hasDesktopEncoderBridge()) return;
 
     const canEdit =
       user.role === "admin" || user.role === "editor" || user.role === "dj";
     if (!canEdit) return;
 
+    enabledRef.current = true;
     let cancelled = false;
-    inFlightRef.current = true;
 
-    void (async () => {
+    async function ensureRunning(reason: string) {
+      if (cancelled || !enabledRef.current || !token) return;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
       try {
         const local = await getLocalEncoderStatus();
         if (cancelled) return;
-        if (local?.running) {
-          successRef.current = true;
-          return;
-        }
+        if (local?.running) return;
 
         const [settings, targets] = await Promise.all([
           apiFetch<ApiSettings>("/api/settings"),
@@ -60,17 +61,8 @@ export function useAutoResumeEncoder() {
 
         let activeId = settings.activeStreamingTargetId;
         const activeExists = activeId ? targets.some((t) => t.id === activeId) : false;
-        if (!activeExists) {
-          activeId = targets[0]!.id;
-          await apiFetch<ApiSettings>("/api/streaming/broadcast-config", {
-            method: "PATCH",
-            token,
-            body: JSON.stringify({
-              activeStreamingTargetId: activeId,
-              broadcastEnabled: true,
-            }),
-          });
-        } else if (!settings.broadcastEnabled) {
+        if (!activeExists || !settings.broadcastEnabled) {
+          activeId = activeExists ? activeId! : targets[0]!.id;
           await apiFetch<ApiSettings>("/api/streaming/broadcast-config", {
             method: "PATCH",
             token,
@@ -84,20 +76,28 @@ export function useAutoResumeEncoder() {
         if (cancelled) return;
         const meta = readAdminMeta();
         const res = await startLocalEncoder(token, meta);
-        if (cancelled) return;
-        if (res.running) {
-          successRef.current = true;
+        if (!res.running && res.error) {
+          console.warn(`[radioflow] encoder ensure (${reason}):`, res.error);
         }
-      } catch {
-        // Silencioso: Emitir sigue disponible para arranque manual.
+      } catch (e) {
+        console.warn(`[radioflow] encoder ensure (${reason}) falló`, e);
       } finally {
         inFlightRef.current = false;
       }
-    })();
+    }
+
+    void ensureRunning("login");
+    const id = window.setInterval(() => void ensureRunning("watchdog"), WATCHDOG_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void ensureRunning("visible");
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       inFlightRef.current = false;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [token, user]);
 }

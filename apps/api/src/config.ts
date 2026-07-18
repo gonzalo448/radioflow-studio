@@ -260,5 +260,10 @@ export function loadEnv(): Env {
     console.error("JWT_SECRET debe tener al menos 32 caracteres en NODE_ENV=production");
     process.exit(1);
   }
-  return parsed.data;
+  const env = parsed.data;
+  // Desktop embebido: la cabina/UI gobierna el avance. Headless solo para API sin UI.
+  if (env.EMBEDDED_STANDALONE && process.env.HEADLESS_PLAYOUT_POLL_MS === undefined) {
+    return { ...env, HEADLESS_PLAYOUT_POLL_MS: 0 };
+  }
+  return env;
 }
